@@ -1,4 +1,4 @@
-FROM python:3.14.1
+FROM python:3.14.3
 
 # Set up code directory
 WORKDIR /usr/src/app
