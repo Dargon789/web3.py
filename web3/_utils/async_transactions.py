@@ -1,8 +1,6 @@
 from typing import (
     TYPE_CHECKING,
-    Dict,
-    Optional,
-    Union,
+    Any,
     cast,
 )
 
@@ -46,13 +44,13 @@ if TYPE_CHECKING:
 
 # unused vars present in these funcs because they all need to have the same signature
 async def _estimate_gas(
-    async_w3: "AsyncWeb3", tx: TxParams, _defaults: Dict[str, Union[bytes, int]]
+    async_w3: "AsyncWeb3[Any]", tx: TxParams, _defaults: dict[str, bytes | int]
 ) -> int:
     return await async_w3.eth.estimate_gas(tx)
 
 
 async def _max_fee_per_gas(
-    async_w3: "AsyncWeb3", tx: TxParams, defaults: Dict[str, Union[bytes, int]]
+    async_w3: "AsyncWeb3[Any]", tx: TxParams, defaults: dict[str, bytes | int]
 ) -> Wei:
     block = await async_w3.eth.get_block("latest")
     max_priority_fee = tx.get(
@@ -62,13 +60,13 @@ async def _max_fee_per_gas(
 
 
 async def _max_priority_fee_gas(
-    async_w3: "AsyncWeb3", _tx: TxParams, _defaults: Dict[str, Union[bytes, int]]
+    async_w3: "AsyncWeb3[Any]", _tx: TxParams, _defaults: dict[str, bytes | int]
 ) -> Wei:
     return await async_w3.eth.max_priority_fee
 
 
 async def _chain_id(
-    async_w3: "AsyncWeb3", _tx: TxParams, _defaults: Dict[str, Union[bytes, int]]
+    async_w3: "AsyncWeb3[Any]", _tx: TxParams, _defaults: dict[str, bytes | int]
 ) -> int:
     return await async_w3.eth.chain_id
 
@@ -85,14 +83,14 @@ TRANSACTION_DEFAULTS = {
 
 
 async def get_block_gas_limit(
-    web3_eth: "AsyncEth", block_identifier: Optional[BlockIdentifier] = None
+    web3_eth: "AsyncEth", block_identifier: BlockIdentifier | None = None
 ) -> int:
     block = await web3_eth.get_block(block_identifier or "latest")
     return block["gasLimit"]
 
 
 async def get_buffered_gas_estimate(
-    async_w3: "AsyncWeb3", transaction: TxParams, gas_buffer: int = 100000
+    async_w3: "AsyncWeb3[Any]", transaction: TxParams, gas_buffer: int = 100000
 ) -> int:
     gas_estimate_transaction = cast(TxParams, dict(**transaction))
 
@@ -110,7 +108,9 @@ async def get_buffered_gas_estimate(
     return min(gas_limit, gas_estimate + gas_buffer)
 
 
-async def async_fill_nonce(async_w3: "AsyncWeb3", transaction: TxParams) -> TxParams:
+async def async_fill_nonce(
+    async_w3: "AsyncWeb3[Any]", transaction: TxParams
+) -> TxParams:
     if "from" in transaction and "nonce" not in transaction:
         tx_count = await async_w3.eth.get_transaction_count(
             cast(ChecksumAddress, transaction["from"]),
@@ -121,7 +121,7 @@ async def async_fill_nonce(async_w3: "AsyncWeb3", transaction: TxParams) -> TxPa
 
 
 async def async_fill_transaction_defaults(
-    async_w3: "AsyncWeb3", transaction: TxParams
+    async_w3: "AsyncWeb3[Any]", transaction: TxParams
 ) -> TxParams:
     """
     If async_w3 is None, fill as much as possible while offline
@@ -133,7 +133,7 @@ async def async_fill_transaction_defaults(
         or any_in_dict(DYNAMIC_FEE_TXN_PARAMS, transaction)
     )
 
-    defaults: Dict[str, Union[bytes, int]] = {}
+    defaults: dict[str, bytes | int] = {}
     for key, default_getter in TRANSACTION_DEFAULTS.items():
         if key not in transaction:
             if (
@@ -165,7 +165,7 @@ async def async_fill_transaction_defaults(
 
 
 async def async_get_required_transaction(
-    async_w3: "AsyncWeb3", transaction_hash: _Hash32
+    async_w3: "AsyncWeb3[Any]", transaction_hash: _Hash32
 ) -> TxData:
     current_transaction = await async_w3.eth.get_transaction(transaction_hash)
     if not current_transaction:
@@ -176,7 +176,7 @@ async def async_get_required_transaction(
 
 
 async def async_replace_transaction(
-    async_w3: "AsyncWeb3", current_transaction: TxData, new_transaction: TxParams
+    async_w3: "AsyncWeb3[Any]", current_transaction: TxData, new_transaction: TxParams
 ) -> HexBytes:
     new_transaction = prepare_replacement_transaction(
         async_w3, current_transaction, new_transaction

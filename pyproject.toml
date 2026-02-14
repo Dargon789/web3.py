@@ -7,6 +7,7 @@ combine_as_imports = true
 extra_standard_library = "pytest"
 force_grid_wrap = 1
 force_sort_within_sections = true
+force_to_top = "pytest"
 honor_noqa = true
 known_first_party = "web3"
 known_third_party = "hypothesis"
@@ -14,7 +15,7 @@ multi_line_output = 3
 profile = "black"
 use_parentheses = true
 # skip `__init__.py` files because sometimes order of initialization is important
-skip="__init__.py,web3/main.py,web3/utils/windows.py"
+skip="__init__.py,web3/main.py,web3/_utils/windows.py"
 
 [tool.mypy]
 check_untyped_defs = true
@@ -25,12 +26,17 @@ disallow_untyped_calls = true
 disallow_untyped_decorators = false
 disallow_untyped_defs = true
 ignore_missing_imports = true
+python_version="3.10"
 strict_equality = true
 strict_optional = false
 warn_redundant_casts = true
 warn_return_any = false
 warn_unused_configs = true
 warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = "sphinx.*"
+follow_imports = "skip"
 
 [tool.pydocstyle]
 # All error codes found here:
@@ -124,3 +130,46 @@ showcontent = true
 directory = "removal"
 name = "Removals"
 showcontent = true
+
+[tool.bumpversion]
+current_version = "8.0.0-beta.1"
+parse = """
+    (?P<major>\\d+)
+    \\.(?P<minor>\\d+)
+    \\.(?P<patch>\\d+)
+		(-
+			(?P<stage>[^.]*)
+			\\.(?P<devnum>\\d+)
+		)?
+"""
+serialize = [
+	"{major}.{minor}.{patch}-{stage}.{devnum}",
+	"{major}.{minor}.{patch}",
+]
+search = "{current_version}"
+replace = "{new_version}"
+regex = false
+ignore_missing_version = false
+tag = true
+sign_tags = true
+tag_name = "v{new_version}"
+tag_message = "Bump version: {current_version} → {new_version}"
+allow_dirty = false
+commit = true
+message = "Bump version: {current_version} → {new_version}"
+
+[tool.bumpversion.parts.stage]
+optional_value = "stable"
+first_value = "stable"
+values = [
+	"alpha",
+	"beta",
+	"stable",
+]
+
+[tool.bumpversion.part.devnum]
+
+[[tool.bumpversion.files]]
+filename = "setup.py"
+search = "version=\"{current_version}\""
+replace = "version=\"{new_version}\""

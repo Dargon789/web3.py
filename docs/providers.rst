@@ -233,7 +233,9 @@ Persistent Connection Base Class
 .. py:class:: web3.providers.persistent.PersistentConnectionProvider(\
         request_timeout: float = 50.0, \
         subscription_response_queue_size: int = 500, \
-        silence_listener_task_exceptions: bool = False\
+        silence_listener_task_exceptions: bool = False \
+        max_connection_retries: int = 5, \
+        request_information_cache_size: int = 500, \
     )
 
     This is a base provider class, inherited by the following providers:
@@ -261,6 +263,13 @@ Persistent Connection Base Class
     * ``silence_listener_task_exceptions`` is a boolean that determines whether
       exceptions raised by the listener task are silenced. Defaults to ``False``,
       raising any exceptions that occur in the listener task.
+
+    * ``max_connection_retries`` is the maximum number of times to retry a connection
+      to the provider when initializing the provider. Defaults to ``5``.
+
+    * ``request_information_cache_size`` specifies the size of the transient cache for
+      storing request details, enabling the provider to process responses based on the
+      original request information. Defaults to ``500``.
 
 AsyncIPCProvider
 ++++++++++++++++
@@ -291,7 +300,7 @@ AsyncIPCProvider
 WebSocketProvider
 +++++++++++++++++
 
-.. py:class:: web3.providers.persistent.WebSocketProvider(endpoint_uri: str, websocket_kwargs: Dict[str, Any] = {})
+.. py:class:: web3.providers.persistent.WebSocketProvider(endpoint_uri: str, websocket_kwargs: Dict[str, Any] = {}, use_text_frames: bool = False)
 
     This provider handles interactions with an WS or WSS based JSON-RPC server.
 
@@ -299,6 +308,8 @@ WebSocketProvider
       ``'ws://localhost:8546'``.
     * ``websocket_kwargs`` this should be a dictionary of keyword arguments which
       will be passed onto the ws/wss websocket connection.
+    * ``use_text_frames`` will ensure websocket data is sent as text frames
+      for servers that do not support binary communication.
 
     This provider inherits from the
     :class:`~web3.providers.persistent.PersistentConnectionProvider` class. Refer to
@@ -307,7 +318,7 @@ WebSocketProvider
 
     Under the hood, the ``WebSocketProvider`` uses the python websockets library for
     making requests.  If you would like to modify how requests are made, you can
-    use the ``websocket_kwargs`` to do so.  See the `websockets documentation`_ for
+    use the ``websocket_kwargs`` to do so.  See the `websockets connection`_ docs for
     available arguments.
 
 
@@ -515,48 +526,6 @@ Interacting with the Persistent Connection
         middleware. Instead, use the methods available on the respective web3 module.
         For example, use ``w3.eth.get_block("latest")`` instead of
         ``w3.socket.make_request("eth_getBlockByNumber", ["latest", True])``.
-
-
-LegacyWebSocketProvider
-~~~~~~~~~~~~~~~~~~~~~~~
-
-.. warning::
-
-        ``LegacyWebSocketProvider`` is deprecated and is likely to be removed in a
-        future major release. Please use ``WebSocketProvider`` instead.
-
-.. py:class:: web3.providers.legacy_websocket.LegacyWebSocketProvider(endpoint_uri[, websocket_timeout, websocket_kwargs])
-
-    This provider handles interactions with an WS or WSS based JSON-RPC server.
-
-    * ``endpoint_uri`` should be the full URI to the RPC endpoint such as
-      ``'ws://localhost:8546'``.
-    * ``websocket_timeout`` is the timeout in seconds, used when receiving or
-      sending data over the connection. Defaults to 10.
-    * ``websocket_kwargs`` this should be a dictionary of keyword arguments which
-      will be passed onto the ws/wss websocket connection.
-
-    .. code-block:: python
-
-        >>> from web3 import Web3
-        >>> w3 = Web3(Web3.LegacyWebSocketProvider("ws://127.0.0.1:8546"))
-
-    Under the hood, ``LegacyWebSocketProvider`` uses the python ``websockets`` library for
-    making requests.  If you would like to modify how requests are made, you can
-    use the ``websocket_kwargs`` to do so.  See the `websockets documentation`_ for
-    available arguments.
-
-    .. _`websockets documentation`: https://websockets.readthedocs.io/en/stable/reference/asyncio/client.html#websockets.client.WebSocketClientProtocol
-
-    Unlike HTTP connections, the timeout for WS connections is controlled by a
-    separate ``websocket_timeout`` argument, as shown below.
-
-
-    .. code-block:: python
-
-        >>> from web3 import Web3
-        >>> w3 = Web3(Web3.LegacyWebSocketProvider("ws://127.0.0.1:8546", websocket_timeout=60))
-
 
 AutoProvider
 ~~~~~~~~~~~~

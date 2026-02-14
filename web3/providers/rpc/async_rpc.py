@@ -2,12 +2,7 @@ import asyncio
 import logging
 from typing import (
     Any,
-    Dict,
     Iterable,
-    List,
-    Optional,
-    Tuple,
-    Union,
     cast,
 )
 
@@ -60,11 +55,10 @@ class AsyncHTTPProvider(AsyncJSONBaseProvider):
 
     def __init__(
         self,
-        endpoint_uri: Optional[Union[URI, str]] = None,
-        request_kwargs: Optional[Any] = None,
-        exception_retry_configuration: Optional[
-            Union[ExceptionRetryConfiguration, Empty]
-        ] = empty,
+        endpoint_uri: URI | str | None = None,
+        request_kwargs: Any | None = None,
+        exception_retry_configuration: None
+        | (ExceptionRetryConfiguration | Empty) = empty,
         **kwargs: Any,
     ) -> None:
         self._request_session_manager = HTTPSessionManager()
@@ -99,18 +93,18 @@ class AsyncHTTPProvider(AsyncJSONBaseProvider):
 
     @exception_retry_configuration.setter
     def exception_retry_configuration(
-        self, value: Union[ExceptionRetryConfiguration, Empty]
+        self, value: ExceptionRetryConfiguration | Empty
     ) -> None:
         self._exception_retry_configuration = value
 
     @to_dict
-    def get_request_kwargs(self) -> Iterable[Tuple[str, Any]]:
+    def get_request_kwargs(self) -> Iterable[tuple[str, Any]]:
         if "headers" not in self._request_kwargs:
             yield "headers", self.get_request_headers()
         yield from self._request_kwargs.items()
 
     @combomethod
-    def get_request_headers(cls) -> Dict[str, str]:
+    def get_request_headers(cls) -> dict[str, str]:
         if isinstance(cls, AsyncHTTPProvider):
             cls_name = cls.__class__.__name__
         else:
@@ -155,21 +149,23 @@ class AsyncHTTPProvider(AsyncJSONBaseProvider):
     @async_handle_request_caching
     async def make_request(self, method: RPCEndpoint, params: Any) -> RPCResponse:
         self.logger.debug(
-            f"Making request HTTP. URI: {self.endpoint_uri}, Method: {method}"
+            "Making request HTTP. URI: %s, Method: %s", self.endpoint_uri, method
         )
         request_data = self.encode_rpc_request(method, params)
         raw_response = await self._make_request(method, request_data)
         response = self.decode_rpc_response(raw_response)
         self.logger.debug(
-            f"Getting response HTTP. URI: {self.endpoint_uri}, "
-            f"Method: {method}, Response: {response}"
+            "Getting response HTTP. URI: %s, Method: %s, Response: %s",
+            self.endpoint_uri,
+            method,
+            response,
         )
         return response
 
     async def make_batch_request(
-        self, batch_requests: List[Tuple[RPCEndpoint, Any]]
-    ) -> Union[List[RPCResponse], RPCResponse]:
-        self.logger.debug(f"Making batch request HTTP - uri: `{self.endpoint_uri}`")
+        self, batch_requests: list[tuple[RPCEndpoint, Any]]
+    ) -> list[RPCResponse] | RPCResponse:
+        self.logger.debug("Making batch request HTTP - uri: `%s`", self.endpoint_uri)
         request_data = self.encode_batch_rpc_request(batch_requests)
         raw_response = await self._request_session_manager.async_make_post_request(
             self.endpoint_uri, request_data, **self.get_request_kwargs()
@@ -180,7 +176,7 @@ class AsyncHTTPProvider(AsyncJSONBaseProvider):
             # RPC errors return only one response with the error object
             return response
         return sort_batch_response_by_response_ids(
-            cast(List[RPCResponse], sort_batch_response_by_response_ids(response))
+            cast(list[RPCResponse], sort_batch_response_by_response_ids(response))
         )
 
     async def disconnect(self) -> None:
@@ -189,4 +185,4 @@ class AsyncHTTPProvider(AsyncJSONBaseProvider):
             await session.close()
         cache.clear()
 
-        self.logger.info(f"Successfully disconnected from: {self.endpoint_uri}")
+        self.logger.info("Successfully disconnected from: %s", self.endpoint_uri)

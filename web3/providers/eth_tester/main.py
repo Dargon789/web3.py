@@ -3,9 +3,7 @@ from typing import (
     Any,
     Callable,
     Coroutine,
-    Dict,
     Literal,
-    Optional,
     Union,
     cast,
 )
@@ -82,7 +80,7 @@ class AsyncEthereumTesterProvider(AsyncBaseProvider):
         self.api_endpoints = API_ENDPOINTS
 
     async def request_func(
-        self, async_w3: "AsyncWeb3", middleware_onion: "MiddlewareOnion"
+        self, async_w3: "AsyncWeb3[Any]", middleware_onion: "MiddlewareOnion"
     ) -> Callable[..., Coroutine[Any, Any, RPCResponse]]:
         # override the request_func to add the ethereum_tester_middleware
 
@@ -122,14 +120,12 @@ class EthereumTesterProvider(BaseProvider):
         ethereum_tester_middleware,
     )
     ethereum_tester = None
-    api_endpoints: Optional[Dict[str, Dict[str, Callable[..., RPCResponse]]]] = None
+    api_endpoints: dict[str, dict[str, Callable[..., RPCResponse]]] | None = None
 
     def __init__(
         self,
-        ethereum_tester: Optional[Union["EthereumTester", "BaseChainBackend"]] = None,
-        api_endpoints: Optional[
-            Dict[str, Dict[str, Callable[..., RPCResponse]]]
-        ] = None,
+        ethereum_tester: Union["EthereumTester", "BaseChainBackend"] | None = None,
+        api_endpoints: None | (dict[str, dict[str, Callable[..., RPCResponse]]]) = None,
     ) -> None:
         # do not import eth_tester until runtime, it is not a default dependency
         super().__init__()
@@ -215,7 +211,7 @@ def _make_response(result: Any, response_id: str, message: str = "") -> RPCRespo
 def _make_request(
     method: RPCEndpoint,
     params: Any,
-    api_endpoints: Dict[str, Dict[str, Any]],
+    api_endpoints: dict[str, dict[str, Any]],
     ethereum_tester_instance: "EthereumTester",
     request_id: str,
 ) -> RPCResponse:

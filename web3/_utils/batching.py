@@ -1,6 +1,3 @@
-from copy import (
-    copy,
-)
 from types import (
     TracebackType,
 )
@@ -9,12 +6,7 @@ from typing import (
     Any,
     Callable,
     Coroutine,
-    Dict,
     Generic,
-    List,
-    Sequence,
-    Tuple,
-    Type,
     Union,
     cast,
 )
@@ -22,12 +14,6 @@ import warnings
 
 from web3._utils.compat import (
     Self,
-)
-from web3.contract.async_contract import (
-    AsyncContractFunction,
-)
-from web3.contract.contract import (
-    ContractFunction,
 )
 from web3.exceptions import (
     Web3ValueError,
@@ -41,6 +27,12 @@ if TYPE_CHECKING:
     from web3 import (  # noqa: F401
         AsyncWeb3,
         Web3,
+    )
+    from web3.contract.async_contract import (
+        AsyncContractFunction,
+    )
+    from web3.contract.contract import (
+        ContractFunction,
     )
     from web3.method import (  # noqa: F401
         Method,
@@ -62,7 +54,7 @@ if TYPE_CHECKING:
 
 BATCH_REQUEST_ID = "batch_request"  # for use as the cache key for batch requests
 
-BatchRequestInformation = Tuple[Tuple["RPCEndpoint", Any], Sequence[Any]]
+BatchRequestInformation = tuple[tuple["RPCEndpoint", Any], tuple[Any, ...]]
 RPC_METHODS_UNSUPPORTED_DURING_BATCH = {
     "eth_subscribe",
     "eth_unsubscribe",
@@ -75,10 +67,10 @@ RPC_METHODS_UNSUPPORTED_DURING_BATCH = {
 
 
 class RequestBatcher(Generic[TFunc]):
-    def __init__(self, web3: Union["AsyncWeb3", "Web3"]) -> None:
+    def __init__(self, web3: Union["AsyncWeb3[Any]", "Web3"]) -> None:
         self.web3 = web3
-        self._requests_info: List[BatchRequestInformation] = []
-        self._async_requests_info: List[
+        self._requests_info: list[BatchRequestInformation] = []
+        self._async_requests_info: list[
             Coroutine[Any, Any, BatchRequestInformation]
         ] = []
         self._initialize_batching()
@@ -99,21 +91,18 @@ class RequestBatcher(Generic[TFunc]):
             )
 
     def _initialize_batching(self) -> None:
-        self._provider._is_batching = True
+        self._provider._batching_context.set(self)
         self.clear()
 
     def _end_batching(self) -> None:
         self.clear()
-        self._provider._is_batching = False
-        if self._provider.has_persistent_connection:
-            provider = cast("PersistentConnectionProvider", self._provider)
-            provider._batch_request_counter = None
+        self._provider._batching_context.set(None)
 
     def add(self, batch_payload: TReturn) -> None:
         self._validate_is_batching()
 
-        if isinstance(batch_payload, (ContractFunction, AsyncContractFunction)):
-            batch_payload = batch_payload.call()  # type: ignore
+        if hasattr(batch_payload, "call"):
+            batch_payload = batch_payload.call()
 
         # When batching, we don't make a request. Instead, we will get the request
         # information and store it in the `_requests_info` list. So we have to cast the
@@ -127,14 +116,14 @@ class RequestBatcher(Generic[TFunc]):
 
     def add_mapping(
         self,
-        batch_payload: Dict[
+        batch_payload: dict[
             Union[
                 "Method[Callable[..., Any]]",
                 Callable[..., Any],
-                ContractFunction,
-                AsyncContractFunction,
+                "ContractFunction",
+                "AsyncContractFunction",
             ],
-            List[Any],
+            list[Any],
         ],
     ) -> None:
         self._validate_is_batching()
@@ -142,7 +131,7 @@ class RequestBatcher(Generic[TFunc]):
             for param in params:
                 self.add(method(param))
 
-    def execute(self) -> List["RPCResponse"]:
+    def execute(self) -> list["RPCResponse"]:
         self._validate_is_batching()
         responses = self.web3.manager._make_batch_request(self._requests_info)
         self._end_batching()
@@ -151,9 +140,6 @@ class RequestBatcher(Generic[TFunc]):
     def clear(self) -> None:
         self._requests_info = []
         self._async_requests_info = []
-        if self._provider.has_persistent_connection:
-            provider = cast("PersistentConnectionProvider", self._provider)
-            provider._batch_request_counter = next(copy(provider.request_counter))
 
     def cancel(self) -> None:
         self._end_batching()
@@ -166,7 +152,7 @@ class RequestBatcher(Generic[TFunc]):
 
     def __exit__(
         self,
-        exc_type: Type[BaseException],
+        exc_type: type[BaseException],
         exc_val: BaseException,
         exc_tb: TracebackType,
     ) -> None:
@@ -174,11 +160,16 @@ class RequestBatcher(Generic[TFunc]):
 
     # -- async -- #
 
-    async def async_execute(self) -> List["RPCResponse"]:
+    async def async_execute(self) -> list["RPCResponse"]:
         self._validate_is_batching()
-        responses = await self.web3.manager._async_make_batch_request(
-            self._async_requests_info
-        )
+        if self._provider.has_persistent_connection:
+            responses = await self.web3.manager._async_make_socket_batch_request(
+                self._async_requests_info
+            )
+        else:
+            responses = await self.web3.manager._async_make_batch_request(
+                self._async_requests_info
+            )
         self._end_batching()
         return responses
 
@@ -190,7 +181,7 @@ class RequestBatcher(Generic[TFunc]):
 
     async def __aexit__(
         self,
-        exc_type: Type[BaseException],
+        exc_type: type[BaseException],
         exc_val: BaseException,
         exc_tb: TracebackType,
     ) -> None:
@@ -198,10 +189,10 @@ class RequestBatcher(Generic[TFunc]):
 
 
 def sort_batch_response_by_response_ids(
-    responses: List["RPCResponse"],
-) -> List["RPCResponse"]:
+    responses: list["RPCResponse"],
+) -> list["RPCResponse"]:
     if all(response.get("id") is not None for response in responses):
-        # If all responses have an `id`, sort them by `id, since the JSON-RPC 2.0 spec
+        # If all responses have an `id`, sort them by `id`, since the JSON-RPC 2.0 spec
         # doesn't guarantee order.
         return sorted(responses, key=lambda response: response["id"])
     else:

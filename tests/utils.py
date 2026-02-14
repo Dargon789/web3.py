@@ -1,8 +1,6 @@
 import asyncio
+import inspect
 import socket
-import time
-
-import websockets
 
 from web3._utils.threads import (
     Timeout,
@@ -39,18 +37,6 @@ def get_open_port():
     return str(port)
 
 
-async def wait_for_ws(endpoint_uri, timeout=10):
-    start = time.time()
-    while time.time() < start + timeout:
-        try:
-            async with websockets.connect(uri=endpoint_uri):
-                pass
-        except OSError:
-            await asyncio.sleep(0.01)
-        else:
-            break
-
-
 async def _async_wait_for_block_fixture_logic(async_w3, block_number=1, timeout=None):
     if not timeout:
         current_block_number = await async_w3.eth.block_number  # type:ignore
@@ -80,7 +66,7 @@ async def _async_wait_for_transaction_fixture_logic(async_w3, txn_hash, timeout=
 def async_partial(f, *args, **kwargs):
     async def f2(*args2, **kwargs2):
         result = f(*args, *args2, **kwargs, **kwargs2)
-        if asyncio.iscoroutinefunction(f):
+        if inspect.iscoroutinefunction(f):
             result = await result
         return result
 

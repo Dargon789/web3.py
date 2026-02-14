@@ -6,6 +6,252 @@ v7 Breaking Changes Summary
 
 .. towncrier release notes start
 
+web3.py v8.0.0-beta.1 (2025-12-18)
+----------------------------------
+
+Breaking Changes
+~~~~~~~~~~~~~~~~
+
+- Drop support for Python 3.8 and 3.9 and upgrade syntax accordingly (`#3774 <https://github.com/ethereum/web3.py/issues/3774>`__)
+- Upgrade websockets requirement to >=14.0. (`#3779 <https://github.com/ethereum/web3.py/issues/3779>`__)
+- Bump eth-utils dependency to require >=5.3.0 (`#3790 <https://github.com/ethereum/web3.py/issues/3790>`__)
+
+
+Bugfixes
+~~~~~~~~
+
+- Fix tests flakiness due to slow data generation from hypothesis triggering a timeout. (`#3730 <https://github.com/ethereum/web3.py/issues/3730>`__)
+- Fix ``topics`` type for ``LogsSubscription`` to reflect AND / OR nested list conditions on log filters. (`#3748 <https://github.com/ethereum/web3.py/issues/3748>`__)
+- Make `AsyncWeb3` with respect to the provider it is instantiated with, fixing static type issues. (`#3761 <https://github.com/ethereum/web3.py/issues/3761>`__)
+- Wrap timeout in ClientTimeout for AsyncBeacon post request (`#3784 <https://github.com/ethereum/web3.py/issues/3784>`__)
+
+
+Improved Documentation
+~~~~~~~~~~~~~~~~~~~~~~
+
+- Update a few broken links (`#3746 <https://github.com/ethereum/web3.py/issues/3746>`__)
+- Fix indentation in the code block in "An introduction to subscriptions" (`#3752 <https://github.com/ethereum/web3.py/issues/3752>`__)
+
+
+Features
+~~~~~~~~
+
+- Add the ``TopicFilter`` type to better describe the cases for filtering logs by topics. (`#3748 <https://github.com/ethereum/web3.py/issues/3748>`__)
+- Add support for Python 3.14 (`#3779 <https://github.com/ethereum/web3.py/issues/3779>`__)
+- Upgrade geth version in CI (`#3787 <https://github.com/ethereum/web3.py/issues/3787>`__)
+
+
+Internal Changes - for web3.py Contributors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Resolve the DeprecationWarning for the usage of `datetime.datetime.utcnow()` (`#3751 <https://github.com/ethereum/web3.py/issues/3751>`__)
+- Use latest Geth version ``v1.16.5`` for integration tests. (`#3775 <https://github.com/ethereum/web3.py/issues/3775>`__)
+
+
+Removals
+~~~~~~~~
+
+- Removal of the deprecated ``LegacyWebSocketProvider``. (`#3762 <https://github.com/ethereum/web3.py/issues/3762>`__)
+
+
+web3.py v7.13.0 (2025-08-04)
+----------------------------
+
+Bugfixes
+~~~~~~~~
+
+- Raise ``BadResponseFormat`` from within ``FormattingMiddleware`` if the raw response is not a dict. (`#3735 <https://github.com/ethereum/web3.py/issues/3735>`__)
+
+
+Improved Documentation
+~~~~~~~~~~~~~~~~~~~~~~
+
+- Fix broken link to external ``eth_gasPrice`` documentation. (`#3717 <https://github.com/ethereum/web3.py/issues/3717>`__)
+
+
+Features
+~~~~~~~~
+
+- Support parallelization of subscription handling globally via the subscription manager ``parallelize`` flag, and on a per-subscription basis via the ``parallelize`` flag on the subscription itself. (`#3709 <https://github.com/ethereum/web3.py/issues/3709>`__)
+
+
+Internal Changes - for web3.py Contributors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Update integration test suite fixture to test against geth ``v1.16.2``. (`#3738 <https://github.com/ethereum/web3.py/issues/3738>`__)
+- Add missing async tests for ``FormattingMiddleware`` as a sanity check. (`#3735 <https://github.com/ethereum/web3.py/issues/3735>`__)
+
+
+web3.py v7.12.1 (2025-07-14)
+----------------------------
+
+Bugfixes
+~~~~~~~~
+
+- Fix ``AutoProvider`` batching setup by adding a proxy batch request. (`#3712 <https://github.com/ethereum/web3.py/issues/3712>`__)
+
+
+Internal Changes - for web3.py Contributors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Update integrations tests to use geth ``v1.16.0``. (`#3727 <https://github.com/ethereum/web3.py/issues/3727>`__)
+
+
+Miscellaneous Changes
+~~~~~~~~~~~~~~~~~~~~~
+
+- `#3698 <https://github.com/ethereum/web3.py/issues/3698>`__, `#3710 <https://github.com/ethereum/web3.py/issues/3710>`__
+
+
+web3.py v7.12.0 (2025-05-22)
+----------------------------
+
+Bugfixes
+~~~~~~~~
+
+- Thread safety for batching and better consistency with ``PersistentConnectionProvider`` implementations:
+
+    - Make request batching threadsafe by using ``contextvars.ContextVar`` rather than a global flag for setting the batching state.
+    - Deterministically match responses with request ids for ``PersistentConnectionProvider`` batch requests. (`#3705 <https://github.com/ethereum/web3.py/issues/3705>`__)
+
+
+Deprecations
+~~~~~~~~~~~~
+
+- Deprecate ``ens_encode_name`` in favor of ``dns_encode_name``. (`#3700 <https://github.com/ethereum/web3.py/issues/3700>`__)
+
+
+Features
+~~~~~~~~
+
+- Introduce ``ens.utils.dns_encode_name`` as a rename of the current ``ens_encode_name``, for consistency across other language implementations and with the ENS docs. Returns ``HexBytes`` instead of ``bytes``. (`#3700 <https://github.com/ethereum/web3.py/issues/3700>`__)
+
+
+Internal Changes - for web3.py Contributors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Update some types in ``web3._utils.method_formatters`` (`#3669 <https://github.com/ethereum/web3.py/issues/3669>`__)
+- Fix issues and start running the core tests with `pytest-xdist`, effectively reducing the CI test times by ~75-80%. (`#3705 <https://github.com/ethereum/web3.py/issues/3705>`__)
+
+
+Performance Improvements
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+- optimize message formatting for logging (`#3643 <https://github.com/ethereum/web3.py/issues/3643>`__)
+- Optimize web3._utils.decorators.reject_recursive_repeats (`#3668 <https://github.com/ethereum/web3.py/issues/3668>`__)
+- optimize Method.method_selector_function (`#3696 <https://github.com/ethereum/web3.py/issues/3696>`__)
+- optimize map_abi_data (`#3697 <https://github.com/ethereum/web3.py/issues/3697>`__)
+
+
+web3.py v7.11.1 (2025-05-12)
+----------------------------
+
+Bugfixes
+~~~~~~~~
+
+- Fix contract event ``FilterParams`` to validate and normalize ``address`` parameters. (`#3618 <https://github.com/ethereum/web3.py/issues/3618>`__)
+- Properly handle ``PersistentConnectionClosedOK`` for ``subscription_manager.handle_subscriptions()``. (`#3690 <https://github.com/ethereum/web3.py/issues/3690>`__)
+
+
+Deprecations
+~~~~~~~~~~~~
+
+- Deprecate eth.get_uncle* methods. Will be removed in v8. (`#3683 <https://github.com/ethereum/web3.py/issues/3683>`__)
+
+
+Internal Changes - for web3.py Contributors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Re-compile test contracts with new Solidity ``v0.8.30`` and re-generate integration test fixture to test against latest geth ``v1.15.11``. (`#3692 <https://github.com/ethereum/web3.py/issues/3692>`__)
+- Remove old test fixtures when generating a new test fixture. (`#3693 <https://github.com/ethereum/web3.py/issues/3693>`__)
+- Address some flaky tests due to a geth bug in state synchronization. (`#3695 <https://github.com/ethereum/web3.py/issues/3695>`__)
+
+
+web3.py v7.11.0 (2025-04-29)
+----------------------------
+
+Bugfixes
+~~~~~~~~
+
+- Checks that ``PersistentConnectionProvider`` response cache value is a dict before attempting to access it like one. Also adds checks to ``make_batch_request`` to make sure it is in batching mode before being called and is not after. (`#3642 <https://github.com/ethereum/web3.py/issues/3642>`__)
+- Moves base providers' ``_is_batching`` and ``_batch_request_func_cache`` from class to instance attrs to help with thread safety. (`#3661 <https://github.com/ethereum/web3.py/issues/3661>`__)
+
+
+Features
+~~~~~~~~
+
+- Support for Prague network upgrade, mainly ``requests_hash`` and ``authorization_list`` formatters. Add support for serializing ``SignedSetCodeTransaction`` (`eth-account` pydantic model) directly added to transaction dicts. (`#3659 <https://github.com/ethereum/web3.py/issues/3659>`__)
+- Allow setting the ``request_information_cache_size`` for ``PersistentConnectionProvider`` implementations. (`#3662 <https://github.com/ethereum/web3.py/issues/3662>`__)
+
+
+Internal Changes - for web3.py Contributors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Update some outdated TODO notes in code & remove old un-tested uncles tests as no longer relevant post-merge. (`#3605 <https://github.com/ethereum/web3.py/issues/3605>`__)
+- Run each integration test in isolation and parallelize, instead of running them all within a single `geth` (for example) process. This prevents muddied test contexts. (`#3659 <https://github.com/ethereum/web3.py/issues/3659>`__)
+- Bound hypothesis integers in some tests to a max of uint256 value (`#3665 <https://github.com/ethereum/web3.py/issues/3665>`__)
+- AsyncENS tests were xfailing for the wrong reason. (`#3675 <https://github.com/ethereum/web3.py/issues/3675>`__)
+
+
+Performance Improvements
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Optimize performance for:
+
+  * web3._utils.utility_methods.all_in_dict
+  * web3._utils.utility_methods.any_in_dict
+  * web3._utils.utility_methods.none_in_dict (`#3667 <https://github.com/ethereum/web3.py/issues/3667>`__)
+- optimize web3._utils.rpc_abi.apply_abi_formatters_to_dict (`#3671 <https://github.com/ethereum/web3.py/issues/3671>`__)
+
+
+web3.py v7.10.0 (2025-03-27)
+----------------------------
+
+Miscellaneous Changes
+~~~~~~~~~~~~~~~~~~~~~
+
+- `#3653 <https://github.com/ethereum/web3.py/issues/3653>`__
+
+
+web3.py v7.9.0 (2025-03-12)
+---------------------------
+
+Bugfixes
+~~~~~~~~
+
+- Prevent mutating list of subscriptions when unsubscribing via the ``subscription_manager`` by iterating over a copy of the provided list. (`#3604 <https://github.com/ethereum/web3.py/issues/3604>`__)
+- Batching can now be used with the AutoProvider (`#3607 <https://github.com/ethereum/web3.py/issues/3607>`__)
+
+
+Improved Documentation
+~~~~~~~~~~~~~~~~~~~~~~
+
+- Update and clean up Contributing docs. (`#3610 <https://github.com/ethereum/web3.py/issues/3610>`__)
+
+
+Features
+~~~~~~~~
+
+- Add ``use_text_frames`` flag for ``WebSocketProvider`` to work around websocket servers that don't support binary frames (`#3619 <https://github.com/ethereum/web3.py/issues/3619>`__)
+- Sync and async support for ``eth_simulateV1`` RPC method. (`#3622 <https://github.com/ethereum/web3.py/issues/3622>`__)
+
+
+Internal Changes - for web3.py Contributors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Renames a test so pytest finds it. (`#3606 <https://github.com/ethereum/web3.py/issues/3606>`__)
+- Merge template, replacing ``bumpversion`` with ``bump-my-version``. (`#3610 <https://github.com/ethereum/web3.py/issues/3610>`__)
+- Update integration test fixture to use latest geth version ``v1.15.5``. (`#3636 <https://github.com/ethereum/web3.py/issues/3636>`__)
+- Use ``-U`` to install latest `py-geth` version for CI geth steps. This is usually a requirement if we're missing the binary for the newly-generated fixture geth version. (`#3637 <https://github.com/ethereum/web3.py/issues/3637>`__)
+- Re-compile test contracts with newly released Solidity ``v0.8.29``. (`#3640 <https://github.com/ethereum/web3.py/issues/3640>`__)
+
+
+Miscellaneous Changes
+~~~~~~~~~~~~~~~~~~~~~
+
+- `#3623 <https://github.com/ethereum/web3.py/issues/3623>`__
+
+
 web3.py v7.8.0 (2025-02-03)
 ---------------------------
 

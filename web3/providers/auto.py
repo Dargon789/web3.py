@@ -2,12 +2,7 @@ import os
 from typing import (
     Any,
     Callable,
-    Dict,
-    Optional,
     Sequence,
-    Tuple,
-    Type,
-    Union,
 )
 from urllib.parse import (
     urlparse,
@@ -21,10 +16,9 @@ from web3.exceptions import (
     CannotHandleRequest,
 )
 from web3.providers import (
-    BaseProvider,
     HTTPProvider,
     IPCProvider,
-    LegacyWebSocketProvider,
+    JSONBaseProvider,
 )
 from web3.types import (
     RPCEndpoint,
@@ -35,7 +29,7 @@ HTTP_SCHEMES = {"http", "https"}
 WS_SCHEMES = {"ws", "wss"}
 
 
-def load_provider_from_environment() -> BaseProvider:
+def load_provider_from_environment() -> JSONBaseProvider | None:
     uri_string = URI(os.environ.get("WEB3_PROVIDER_URI", ""))
     if not uri_string:
         return None
@@ -44,15 +38,13 @@ def load_provider_from_environment() -> BaseProvider:
 
 
 def load_provider_from_uri(
-    uri_string: URI, headers: Optional[Dict[str, Tuple[str, str]]] = None
-) -> BaseProvider:
+    uri_string: URI, headers: dict[str, tuple[str, str]] | None = None
+) -> JSONBaseProvider:
     uri = urlparse(uri_string)
     if uri.scheme == "file":
         return IPCProvider(uri.path)
     elif uri.scheme in HTTP_SCHEMES:
         return HTTPProvider(uri_string, headers)
-    elif uri.scheme in WS_SCHEMES:
-        return LegacyWebSocketProvider(uri_string)
     else:
         raise NotImplementedError(
             "Web3 does not know how to connect to scheme "
@@ -60,20 +52,18 @@ def load_provider_from_uri(
         )
 
 
-class AutoProvider(BaseProvider):
+class AutoProvider(JSONBaseProvider):
     default_providers = (
         load_provider_from_environment,
         IPCProvider,
         HTTPProvider,
-        LegacyWebSocketProvider,
     )
     _active_provider = None
 
     def __init__(
         self,
-        potential_providers: Optional[
-            Sequence[Union[Callable[..., BaseProvider], Type[BaseProvider]]]
-        ] = None,
+        potential_providers: None
+        | (Sequence[Callable[..., JSONBaseProvider] | type[JSONBaseProvider]]) = None,
     ) -> None:
         """
         :param iterable potential_providers: ordered series of provider classes
@@ -83,6 +73,7 @@ class AutoProvider(BaseProvider):
         in an attempt to find an active node. The list will default to
         :attribute:`default_providers`.
         """
+        super().__init__()
         if potential_providers:
             self._potential_providers = potential_providers
         else:
@@ -93,6 +84,14 @@ class AutoProvider(BaseProvider):
             return self._proxy_request(method, params)
         except OSError:
             return self._proxy_request(method, params, use_cache=False)
+
+    def make_batch_request(
+        self, requests: list[tuple[RPCEndpoint, Any]]
+    ) -> list[RPCResponse] | RPCResponse:
+        try:
+            return self._proxy_batch_request(requests)
+        except OSError:
+            return self._proxy_batch_request(requests, use_cache=False)
 
     def is_connected(self, show_traceback: bool = False) -> bool:
         provider = self._get_active_provider(use_cache=True)
@@ -110,7 +109,19 @@ class AutoProvider(BaseProvider):
 
         return provider.make_request(method, params)
 
-    def _get_active_provider(self, use_cache: bool) -> Optional[BaseProvider]:
+    def _proxy_batch_request(
+        self, requests: list[tuple[RPCEndpoint, Any]], use_cache: bool = True
+    ) -> list[RPCResponse] | RPCResponse:
+        provider = self._get_active_provider(use_cache)
+        if provider is None:
+            raise CannotHandleRequest(
+                "Could not discover provider while making batch request: "
+                f"requests:{requests}\n"
+            )
+
+        return provider.make_batch_request(requests)
+
+    def _get_active_provider(self, use_cache: bool) -> JSONBaseProvider | None:
         if use_cache and self._active_provider is not None:
             return self._active_provider
 

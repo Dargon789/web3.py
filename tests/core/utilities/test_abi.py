@@ -1,17 +1,12 @@
+import pytest
 from decimal import (
     Decimal,
 )
-import pytest
 import re
 from typing import (
     Any,
     Callable,
-    Dict,
-    List,
-    Optional,
     Sequence,
-    Tuple,
-    Type,
 )
 
 from eth_abi.codec import (
@@ -239,7 +234,7 @@ def contract_abi() -> ABI:
     ),
 )
 def test_get_tuple_type_str_parts(
-    input: str, expected: Optional[Tuple[str, Optional[str]]]
+    input: str, expected: tuple[str, str | None] | None
 ) -> None:
     assert get_tuple_type_str_parts(input) == expected
 
@@ -249,8 +244,8 @@ def test_get_tuple_type_str_parts(
     [
         (
             ["bool[2]", "bytes"],
-            [[True, False], b"\x00\xFF"],
-            [("bool[2]", [("bool", True), ("bool", False)]), ("bytes", b"\x00\xFF")],
+            [[True, False], b"\x00\xff"],
+            [("bool[2]", [("bool", True), ("bool", False)]), ("bytes", b"\x00\xff")],
         ),
         (
             ["uint256[]"],
@@ -260,7 +255,7 @@ def test_get_tuple_type_str_parts(
     ],
 )
 def test_abi_data_tree(
-    types: List[str], data: Tuple[List[bool], bytes], expected: List[Any]
+    types: list[str], data: tuple[list[bool], bytes], expected: list[Any]
 ) -> None:
     assert abi_data_tree(types, data) == expected
 
@@ -327,17 +322,17 @@ def test_abi_data_tree(
     ],
 )
 def test_map_abi_data(
-    types: List[str],
-    data: Tuple[Any, ...],
-    funcs: Tuple[Callable[..., Any], ...],
-    expected: Tuple[Any, ...],
+    types: list[str],
+    data: tuple[Any, ...],
+    funcs: tuple[Callable[..., Any], ...],
+    expected: tuple[Any, ...],
 ) -> None:
     assert map_abi_data(funcs, types, data) == expected
 
 
 @pytest.mark.parametrize("arg", (6, 7, 9, 12, 20, 30))
 def test_exact_length_bytes_encoder_raises_on_non_multiples_of_8_bit_size(
-    arg: Tuple[int, ...]
+    arg: tuple[int, ...],
 ) -> None:
     with pytest.raises(Web3ValueError, match="multiple of 8"):
         _ = ExactLengthBytesEncoder(None, data_byte_size=2, value_bit_size=arg)
@@ -362,7 +357,7 @@ def test_exact_length_bytes_encoder_raises_on_non_multiples_of_8_bit_size(
     ],
 )
 def test_recursive_dict_to_namedtuple(
-    input: Dict[str, Any], expected_output: str
+    input: dict[str, Any], expected_output: str
 ) -> None:
     named_tuple_output = recursive_dict_to_namedtuple(input)
     output_repr = named_tuple_output.__repr__()
@@ -393,7 +388,7 @@ def test_get_abi_element_info(
     contract_abi: ABI,
     abi_element_identifier: ABIElementIdentifier,
     args: Sequence[Any],
-    kwargs: Dict[str, Any],
+    kwargs: dict[str, Any],
     expected_selector: str,
     expected_arguments: Any,
 ) -> None:
@@ -541,7 +536,7 @@ def test_get_abi_element(
     abi: ABI,
     abi_element_identifier: ABIElementIdentifier,
     args: Sequence[Any],
-    kwargs: Dict[str, Any],
+    kwargs: dict[str, Any],
     expected_abi: ABIElement,
 ) -> None:
     assert (
@@ -702,9 +697,9 @@ def test_get_abi_element(
 def test_get_abi_element_raises_with_invalid_parameters(
     abi: ABI,
     abi_element_identifier: ABIElementIdentifier,
-    args: Optional[Sequence[Any]],
-    kwargs: Optional[Dict[str, Any]],
-    expected_error: Type[Exception],
+    args: Sequence[Any] | None,
+    kwargs: dict[str, Any] | None,
+    expected_error: type[Exception],
     expected_message: str,
 ) -> None:
     with pytest.raises(expected_error, match=re.escape(expected_message)):
@@ -829,7 +824,7 @@ def test_get_event_abi(event_name: str, input_args: Sequence[ABIComponent]) -> N
 
     with pytest.warns(
         DeprecationWarning,
-        match="get_event_abi is deprecated in favor of get_abi_element",
+        match="get_event_abi is deprecated: use get_abi_element instead",
     ):
         assert (
             get_event_abi(contract_abi, event_name, input_names) == expected_event_abi
@@ -849,7 +844,7 @@ def test_get_event_abi(event_name: str, input_args: Sequence[ABIComponent]) -> N
     ),
 )
 def test_get_event_abi_raises_on_error(
-    name: str, args: Sequence[str], error_type: Type[Exception], expected_value: str
+    name: str, args: Sequence[str], error_type: type[Exception], expected_value: str
 ) -> None:
     contract_abi: ABI = [
         {

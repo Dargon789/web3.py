@@ -7,8 +7,6 @@ from typing import (
     Coroutine,
     Optional,
     Sequence,
-    Tuple,
-    Union,
     cast,
 )
 
@@ -57,7 +55,7 @@ from ens.utils import (
     address_in,
     address_to_reverse_domain,
     default,
-    ens_encode_name,
+    dns_encode_name,
     init_async_web3,
     is_empty_name,
     is_none_or_zero_address,
@@ -72,7 +70,9 @@ if TYPE_CHECKING:
         AsyncContract,
         AsyncContractFunction,
     )
-    from web3.main import AsyncWeb3  # noqa: F401
+    from web3.main import (  # noqa: F401
+        AsyncWeb3,
+    )
     from web3.middleware.base import (  # noqa: F401
         Middleware,
     )
@@ -96,13 +96,13 @@ class AsyncENS(BaseENS):
     """
 
     # mypy types
-    w3: "AsyncWeb3"
+    w3: "AsyncWeb3[Any]"
 
     def __init__(
         self,
-        provider: "AsyncBaseProvider" = None,
-        addr: ChecksumAddress = None,
-        middleware: Optional[Sequence[Tuple["Middleware", str]]] = None,
+        provider: Optional["AsyncBaseProvider"] = None,
+        addr: ChecksumAddress | None = None,
+        middleware: Sequence[tuple["Middleware", str]] | None = None,
     ) -> None:
         """
         :param provider: a single provider used to connect to Ethereum
@@ -123,7 +123,9 @@ class AsyncENS(BaseENS):
         )
 
     @classmethod
-    def from_web3(cls, w3: "AsyncWeb3", addr: ChecksumAddress = None) -> "AsyncENS":
+    def from_web3(
+        cls, w3: "AsyncWeb3[Any]", addr: ChecksumAddress = None
+    ) -> "AsyncENS":
         """
         Generate an AsyncENS instance with web3
 
@@ -133,7 +135,11 @@ class AsyncENS(BaseENS):
         """
         provider = w3.manager.provider
         middleware = w3.middleware_onion.middleware
-        ns = cls(cast("AsyncBaseProvider", provider), addr=addr, middleware=middleware)
+        ns = cls(
+            cast("AsyncBaseProvider", provider),
+            addr=addr,
+            middleware=middleware,
+        )
 
         # inherit strict bytes checking from w3 instance
         ns.strict_bytes_type_checking = w3.strict_bytes_type_checking
@@ -143,8 +149,8 @@ class AsyncENS(BaseENS):
     async def address(
         self,
         name: str,
-        coin_type: Optional[int] = None,
-    ) -> Optional[ChecksumAddress]:
+        coin_type: int | None = None,
+    ) -> ChecksumAddress | None:
         """
         Look up the Ethereum address that `name` currently points to.
 
@@ -159,7 +165,10 @@ class AsyncENS(BaseENS):
         else:
             r = await self.resolver(name)
             await _async_validate_resolver_and_interface_id(
-                name, r, ENS_MULTICHAIN_ADDRESS_INTERFACE_ID, "addr(bytes32,uint256)"
+                name,
+                r,
+                ENS_MULTICHAIN_ADDRESS_INTERFACE_ID,
+                "addr(bytes32,uint256)",
             )
             node = raw_name_to_hash(name)
             address_as_bytes = await r.caller.addr(node, coin_type)
@@ -170,12 +179,12 @@ class AsyncENS(BaseENS):
     async def setup_address(
         self,
         name: str,
-        address: Union[Address, ChecksumAddress, HexAddress] = cast(  # noqa: B008
-            ChecksumAddress, default
-        ),
-        coin_type: Optional[int] = None,
+        address: Address
+        | ChecksumAddress
+        | HexAddress = cast(ChecksumAddress, default),  # noqa: B008
+        coin_type: int | None = None,
         transact: Optional["TxParams"] = None,
-    ) -> Optional[HexBytes]:
+    ) -> HexBytes | None:
         """
         Set up the name to point to the supplied address.
         The sender of the transaction must own the name, or
@@ -224,7 +233,7 @@ class AsyncENS(BaseENS):
                 transact
             )
 
-    async def name(self, address: ChecksumAddress) -> Optional[str]:
+    async def name(self, address: ChecksumAddress) -> str | None:
         """
         Look up the name that the address points to, using a
         reverse lookup. Reverse lookup is opt-in for name owners.
@@ -244,7 +253,7 @@ class AsyncENS(BaseENS):
     async def setup_name(
         self,
         name: str,
-        address: Optional[ChecksumAddress] = None,
+        address: ChecksumAddress | None = None,
         transact: Optional["TxParams"] = None,
     ) -> HexBytes:
         """
@@ -310,7 +319,7 @@ class AsyncENS(BaseENS):
         name: str,
         new_owner: ChecksumAddress = None,
         transact: Optional["TxParams"] = None,
-    ) -> Optional[ChecksumAddress]:
+    ) -> ChecksumAddress | None:
         """
         Set the owner of the supplied name to `new_owner`.
 
@@ -433,7 +442,7 @@ class AsyncENS(BaseENS):
         self,
         normal_name: str,
         fn_name: str = "addr",
-    ) -> Tuple[Optional["AsyncContract"], str]:
+    ) -> tuple[Optional["AsyncContract"], str]:
         current_name = normal_name
 
         # look for a resolver, starting at the full name and taking the
@@ -450,7 +459,8 @@ class AsyncENS(BaseENS):
             if not is_none_or_zero_address(resolver_addr):
                 # if resolver found, return it
                 resolver = cast(
-                    "AsyncContract", self._type_aware_resolver(resolver_addr, fn_name)
+                    "AsyncContract",
+                    self._type_aware_resolver(resolver_addr, fn_name),
                 )
                 return resolver, current_name
 
@@ -460,7 +470,7 @@ class AsyncENS(BaseENS):
     async def _set_resolver(
         self,
         name: str,
-        resolver_addr: Optional[ChecksumAddress] = None,
+        resolver_addr: ChecksumAddress | None = None,
         transact: Optional["TxParams"] = None,
     ) -> "AsyncContract":
         if not transact:
@@ -483,7 +493,7 @@ class AsyncENS(BaseENS):
         self,
         name: str,
         fn_name: str = "addr",
-    ) -> Optional[Union[ChecksumAddress, str]]:
+    ) -> ChecksumAddress | str | None:
         normal_name = normalize_name(name)
 
         resolver, current_name = await self._get_resolver(normal_name, fn_name)
@@ -500,7 +510,7 @@ class AsyncENS(BaseENS):
 
             calldata = resolver.encode_abi(*contract_func_with_args)
             contract_call_result = await resolver.caller.resolve(
-                ens_encode_name(normal_name),
+                dns_encode_name(normal_name),
                 calldata,
             )
             result = self._decode_ensip10_resolve_data(
@@ -519,7 +529,7 @@ class AsyncENS(BaseENS):
         self,
         account: ChecksumAddress,
         name: str,
-        parent_owned: Optional[str] = None,
+        parent_owned: str | None = None,
     ) -> None:
         if not address_in(account, await self.w3.eth.accounts):
             raise UnauthorizedError(
@@ -529,7 +539,7 @@ class AsyncENS(BaseENS):
 
     async def _first_owner(
         self, name: str
-    ) -> Tuple[Optional[ChecksumAddress], Sequence[str], str]:
+    ) -> tuple[ChecksumAddress | None, Sequence[str], str]:
         """
         Takes a name, and returns the owner of the deepest subdomain that has an owner
 
@@ -550,7 +560,7 @@ class AsyncENS(BaseENS):
         owner: ChecksumAddress,
         unowned: Sequence[str],
         owned: str,
-        old_owner: Optional[ChecksumAddress] = None,
+        old_owner: ChecksumAddress | None = None,
         transact: Optional["TxParams"] = None,
     ) -> None:
         if not transact:
@@ -571,7 +581,7 @@ class AsyncENS(BaseENS):
 
     async def _setup_reverse(
         self,
-        name: Optional[str],
+        name: str | None,
         address: ChecksumAddress,
         transact: Optional["TxParams"] = None,
     ) -> HexBytes:

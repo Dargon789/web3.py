@@ -3,7 +3,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Collection,
-    Dict,
     Generator,
     Literal,
     Sequence,
@@ -21,13 +20,13 @@ from eth_typing import (
 from eth_utils import (
     is_same_address,
 )
-from flaky import (
-    flaky,
-)
 from hexbytes import (
     HexBytes,
 )
 import requests
+from websockets.protocol import (
+    State,
+)
 
 from web3._utils.http import (
     DEFAULT_HTTP_TIMEOUT,
@@ -44,18 +43,9 @@ if TYPE_CHECKING:
     )
     from requests import Response  # noqa: F401
 
-    from web3 import Web3  # noqa: F401
     from web3._utils.compat import (  # noqa: F401
         Self,
     )
-
-
-"""
-flaky_geth_dev_mining decorator for tests requiring a pending block
-for the duration of the test. This behavior can be flaky
-due to timing of the test running as a block is mined.
-"""
-flaky_geth_dev_mining = flaky(max_runs=3, min_passes=1)
 
 
 def assert_contains_log(
@@ -89,7 +79,7 @@ def mock_offchain_lookup_request_response(
         status_code = mocked_status_code
 
         @staticmethod
-        def json() -> Dict[str, str]:
+        def json() -> dict[str, str]:
             return {json_data_field: mocked_json_data}  # noqa: E704
 
         @staticmethod
@@ -139,12 +129,12 @@ def async_mock_offchain_lookup_request_response(
             return self
 
         @staticmethod
-        async def json() -> Dict[str, str]:
+        async def json() -> dict[str, str]:
             return {json_data_field: mocked_json_data}  # noqa: E704
 
         @staticmethod
         def raise_for_status() -> None:
-            raise Exception("called raise_for_status()")  # noqa: E501, E704
+            raise Exception("called raise_for_status()")  # noqa: E704
 
     async def _mock_specific_request(
         *args: Any, **kwargs: Any
@@ -172,10 +162,12 @@ def async_mock_offchain_lookup_request_response(
 
 
 class WebSocketMessageStreamMock:
-    closed: bool = False
+    state: State = State.OPEN
 
     def __init__(
-        self, messages: Collection[bytes] = None, raise_exception: Exception = None
+        self,
+        messages: Collection[bytes] = None,
+        raise_exception: Exception = None,
     ) -> None:
         self.queue = asyncio.Queue()  # type: ignore  # py38 issue
         for msg in messages or []:

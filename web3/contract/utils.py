@@ -3,11 +3,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    List,
-    Optional,
     Sequence,
-    Tuple,
-    Type,
     Union,
     cast,
 )
@@ -43,8 +39,8 @@ from web3._utils.abi import (
 from web3._utils.async_transactions import (
     async_fill_transaction_defaults,
 )
-from web3._utils.compat import (
-    TypeAlias,
+from web3._utils.batching import (
+    BatchRequestInformation,
 )
 from web3._utils.contracts import (
     prepare_transaction,
@@ -62,7 +58,6 @@ from web3.exceptions import (
 from web3.types import (
     ABIElementIdentifier,
     BlockIdentifier,
-    RPCEndpoint,
     StateOverride,
     TContractEvent,
     TContractFn,
@@ -86,11 +81,11 @@ ACCEPTABLE_EMPTY_STRINGS = ["0x", b"0x", "", b""]
 
 @curry
 def format_contract_call_return_data_curried(
-    async_w3: Union["AsyncWeb3", "Web3"],
+    async_w3: Union["AsyncWeb3[Any]", "Web3"],
     decode_tuples: bool,
     fn_abi: ABICallable,
     abi_element_identifier: ABIElementIdentifier,
-    normalizers: Tuple[Callable[..., Any], ...],
+    normalizers: tuple[Callable[..., Any], ...],
     output_types: Sequence[TypeStr],
     return_data: Any,
 ) -> Any:
@@ -124,15 +119,15 @@ def format_contract_call_return_data_curried(
 def call_contract_function(
     w3: "Web3",
     address: ChecksumAddress,
-    normalizers: Tuple[Callable[..., Any], ...],
+    normalizers: tuple[Callable[..., Any], ...],
     abi_element_identifier: ABIElementIdentifier,
     transaction: TxParams,
-    block_id: Optional[BlockIdentifier] = None,
-    contract_abi: Optional[ABI] = None,
-    abi_callable: Optional[ABICallable] = None,
-    state_override: Optional[StateOverride] = None,
-    ccip_read_enabled: Optional[bool] = None,
-    decode_tuples: Optional[bool] = False,
+    block_id: BlockIdentifier | None = None,
+    contract_abi: ABI | None = None,
+    abi_callable: ABICallable | None = None,
+    state_override: StateOverride | None = None,
+    ccip_read_enabled: bool | None = None,
+    decode_tuples: bool | None = False,
     *args: Any,
     **kwargs: Any,
 ) -> Any:
@@ -175,10 +170,8 @@ def call_contract_function(
     if abi_callable["type"] == "function":
         output_types = get_abi_output_types(abi_callable)
 
-    provider = w3.provider
-    if hasattr(provider, "_is_batching") and provider._is_batching:
-        BatchingReturnData: TypeAlias = Tuple[Tuple[RPCEndpoint, Any], Tuple[Any, ...]]
-        request_information = tuple(cast(BatchingReturnData, return_data))
+    if w3.provider._is_batching:
+        request_information = tuple(cast(BatchRequestInformation, return_data))
         method_and_params = request_information[0]
 
         # append return data formatting to result formatters
@@ -243,10 +236,10 @@ def call_contract_function(
 def transact_with_contract_function(
     address: ChecksumAddress,
     w3: "Web3",
-    abi_element_identifier: Optional[ABIElementIdentifier] = None,
-    transaction: Optional[TxParams] = None,
-    contract_abi: Optional[ABI] = None,
-    fn_abi: Optional[ABIFunction] = None,
+    abi_element_identifier: ABIElementIdentifier | None = None,
+    transaction: TxParams | None = None,
+    contract_abi: ABI | None = None,
+    fn_abi: ABIFunction | None = None,
     *args: Any,
     **kwargs: Any,
 ) -> HexBytes:
@@ -272,12 +265,12 @@ def transact_with_contract_function(
 def estimate_gas_for_function(
     address: ChecksumAddress,
     w3: "Web3",
-    abi_element_identifier: Optional[ABIElementIdentifier] = None,
-    transaction: Optional[TxParams] = None,
-    contract_abi: Optional[ABI] = None,
-    fn_abi: Optional[ABIFunction] = None,
-    block_identifier: Optional[BlockIdentifier] = None,
-    state_override: Optional[StateOverride] = None,
+    abi_element_identifier: ABIElementIdentifier | None = None,
+    transaction: TxParams | None = None,
+    contract_abi: ABI | None = None,
+    fn_abi: ABIFunction | None = None,
+    block_identifier: BlockIdentifier | None = None,
+    state_override: StateOverride | None = None,
     *args: Any,
     **kwargs: Any,
 ) -> int:
@@ -304,10 +297,10 @@ def estimate_gas_for_function(
 def build_transaction_for_function(
     address: ChecksumAddress,
     w3: "Web3",
-    abi_element_identifier: Optional[ABIElementIdentifier] = None,
-    transaction: Optional[TxParams] = None,
-    contract_abi: Optional[ABI] = None,
-    fn_abi: Optional[ABIFunction] = None,
+    abi_element_identifier: ABIElementIdentifier | None = None,
+    transaction: TxParams | None = None,
+    contract_abi: ABI | None = None,
+    fn_abi: ABIFunction | None = None,
     *args: Any,
     **kwargs: Any,
 ) -> TxParams:
@@ -335,11 +328,11 @@ def build_transaction_for_function(
 
 def find_functions_by_identifier(
     contract_abi: ABI,
-    w3: Union["Web3", "AsyncWeb3"],
+    w3: Union["Web3", "AsyncWeb3[Any]"],
     address: ChecksumAddress,
     callable_check: Callable[..., Any],
-    function_type: Type[TContractFn],
-) -> List[TContractFn]:
+    function_type: type[TContractFn],
+) -> list[TContractFn]:
     """
     Given a contract ABI, return a list of TContractFunction instances.
     """
@@ -379,11 +372,11 @@ def get_function_by_identifier(
 
 def find_events_by_identifier(
     contract_abi: ABI,
-    w3: Union["Web3", "AsyncWeb3"],
+    w3: Union["Web3", "AsyncWeb3[Any]"],
     address: ChecksumAddress,
     callable_check: Callable[..., Any],
-    event_type: Type[TContractEvent],
-) -> List[TContractEvent]:
+    event_type: type[TContractEvent],
+) -> list[TContractEvent]:
     """
     Given a contract ABI, return a list of TContractEvent instances.
     """
@@ -421,17 +414,17 @@ def get_event_by_identifier(
 
 
 async def async_call_contract_function(
-    async_w3: "AsyncWeb3",
+    async_w3: "AsyncWeb3[Any]",
     address: ChecksumAddress,
-    normalizers: Tuple[Callable[..., Any], ...],
+    normalizers: tuple[Callable[..., Any], ...],
     abi_element_identifier: ABIElementIdentifier,
     transaction: TxParams,
-    block_id: Optional[BlockIdentifier] = None,
-    contract_abi: Optional[ABI] = None,
-    fn_abi: Optional[ABIFunction] = None,
-    state_override: Optional[StateOverride] = None,
-    ccip_read_enabled: Optional[bool] = None,
-    decode_tuples: Optional[bool] = False,
+    block_id: BlockIdentifier | None = None,
+    contract_abi: ABI | None = None,
+    fn_abi: ABIFunction | None = None,
+    state_override: StateOverride | None = None,
+    ccip_read_enabled: bool | None = None,
+    decode_tuples: bool | None = False,
     *args: Any,
     **kwargs: Any,
 ) -> Any:
@@ -483,35 +476,23 @@ async def async_call_contract_function(
             normalizers,
             output_types,
         )
-        if async_w3.provider.has_persistent_connection:
-            # get the current request id
-            provider = cast("PersistentConnectionProvider", async_w3.provider)
-            current_request_id = provider._batch_request_counter - 1
-            provider._request_processor.append_result_formatter_for_request(
-                current_request_id, contract_call_return_data_formatter
-            )
-        else:
-            BatchingReturnData: TypeAlias = Tuple[
-                Tuple[RPCEndpoint, Any], Tuple[Any, ...]
-            ]
-            request_information = tuple(cast(BatchingReturnData, return_data))
-            method_and_params = request_information[0]
 
-            # append return data formatter to result formatters
-            current_response_formatters = request_information[1]
-            current_result_formatters = current_response_formatters[0]
-            updated_result_formatters = compose(
-                contract_call_return_data_formatter,
-                current_result_formatters,
-            )
-            response_formatters = (
-                updated_result_formatters,  # result formatters
-                current_response_formatters[1],  # error formatters
-                current_response_formatters[2],  # null result formatters
-            )
-            return (method_and_params, response_formatters)
+        request_information = tuple(cast(BatchRequestInformation, return_data))
+        method_and_params = request_information[0]
 
-        return return_data
+        # append return data formatter to result formatters
+        current_response_formatters = request_information[1]
+        current_result_formatters = current_response_formatters[0]
+        updated_result_formatters = compose(
+            contract_call_return_data_formatter,
+            current_result_formatters,
+        )
+        response_formatters = (
+            updated_result_formatters,  # result formatters
+            current_response_formatters[1],  # error formatters
+            current_response_formatters[2],  # null result formatters
+        )
+        return (method_and_params, response_formatters)
 
     try:
         output_data = async_w3.codec.decode(output_types, return_data)
@@ -549,11 +530,11 @@ async def async_call_contract_function(
 
 async def async_transact_with_contract_function(
     address: ChecksumAddress,
-    async_w3: "AsyncWeb3",
-    abi_element_identifier: Optional[ABIElementIdentifier] = None,
-    transaction: Optional[TxParams] = None,
-    contract_abi: Optional[ABI] = None,
-    fn_abi: Optional[ABIFunction] = None,
+    async_w3: "AsyncWeb3[Any]",
+    abi_element_identifier: ABIElementIdentifier | None = None,
+    transaction: TxParams | None = None,
+    contract_abi: ABI | None = None,
+    fn_abi: ABIFunction | None = None,
     *args: Any,
     **kwargs: Any,
 ) -> HexBytes:
@@ -578,13 +559,13 @@ async def async_transact_with_contract_function(
 
 async def async_estimate_gas_for_function(
     address: ChecksumAddress,
-    async_w3: "AsyncWeb3",
-    abi_element_identifier: Optional[ABIElementIdentifier] = None,
-    transaction: Optional[TxParams] = None,
-    contract_abi: Optional[ABI] = None,
-    fn_abi: Optional[ABIFunction] = None,
-    block_identifier: Optional[BlockIdentifier] = None,
-    state_override: Optional[StateOverride] = None,
+    async_w3: "AsyncWeb3[Any]",
+    abi_element_identifier: ABIElementIdentifier | None = None,
+    transaction: TxParams | None = None,
+    contract_abi: ABI | None = None,
+    fn_abi: ABIFunction | None = None,
+    block_identifier: BlockIdentifier | None = None,
+    state_override: StateOverride | None = None,
     *args: Any,
     **kwargs: Any,
 ) -> int:
@@ -612,11 +593,11 @@ async def async_estimate_gas_for_function(
 
 async def async_build_transaction_for_function(
     address: ChecksumAddress,
-    async_w3: "AsyncWeb3",
-    abi_element_identifier: Optional[ABIElementIdentifier] = None,
-    transaction: Optional[TxParams] = None,
-    contract_abi: Optional[ABI] = None,
-    fn_abi: Optional[ABIFunction] = None,
+    async_w3: "AsyncWeb3[Any]",
+    abi_element_identifier: ABIElementIdentifier | None = None,
+    transaction: TxParams | None = None,
+    contract_abi: ABI | None = None,
+    fn_abi: ABIFunction | None = None,
     *args: Any,
     **kwargs: Any,
 ) -> TxParams:

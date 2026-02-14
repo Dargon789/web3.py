@@ -312,7 +312,7 @@ Each Contract Factory exposes the following methods.
     - ``to_block`` optional. Defaults to 'latest'. Defines the ending block (inclusive) in the filter block range.  Special values 'latest' and 'pending' set a dynamic range that always includes the 'latest' or 'pending' blocks for the filter's upper block range.
     - ``address`` optional. Defaults to the contract address. The filter matches the event logs emanating from ``address``.
     - ``argument_filters``, optional. Expects a dictionary of argument names and values. When provided event logs are filtered for the event argument values. Event arguments can be both indexed or unindexed. Indexed values will be translated to their corresponding topic arguments. Unindexed arguments will be filtered using a regular expression.
-    - ``topics`` optional, accepts the standard JSON-RPC topics argument.  See the JSON-RPC documentation for `eth_newFilter <https://github.com/ethereum/wiki/wiki/JSON-RPC#eth_newfilter>`_ more information on the ``topics`` parameters.
+    - ``topics`` optional, accepts the standard JSON-RPC topics argument.  See the JSON-RPC documentation for `eth_newFilter <https://ethereum.org/en/developers/docs/apis/json-rpc/#eth_newfilter>`_ more information on the ``topics`` parameters.
 
     .. doctest:: contractmethods
 
@@ -831,7 +831,7 @@ The :py:class:`ContractFunction` class provides attributes for each function. Ac
 
     The signature of the function assigned to the class ``__name__`` during initialization.
     Fallback and Receive functions will be assigned as classes :py:class:`FallbackFn` or
-    :py:class:`RecieveFn` respectively.
+    :py:class:`ReceiveFn` respectively.
 
 .. py:attribute:: ContractFunction.myMethod(*args, **kwargs).name
 
@@ -1728,10 +1728,10 @@ appropriately in the following way:
 
 .. code-block:: python
 
-    from web3 import Web3, WebSocketProvider
+    from web3 import Web3, HTTPProvider
     from web3.utils import handle_offchain_lookup
 
-    w3 = Web3(WebSocketProvider(...))
+    w3 = Web3(HTTPProvider(...))
 
     myContract = w3.eth.contract(address=...)
     myData = b'data for offchain lookup function call'

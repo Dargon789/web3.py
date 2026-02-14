@@ -2,7 +2,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Dict,
 )
 
 from eth_utils.curried import (
@@ -121,7 +120,7 @@ def _chain_id_validator(web3_chain_id: int) -> Callable[..., Any]:
 
 
 def _build_formatters_dict(
-    request_formatters: Dict[RPCEndpoint, Any]
+    request_formatters: dict[RPCEndpoint, Any],
 ) -> FormattersDict:
     return dict(
         request_formatters=request_formatters,
@@ -149,7 +148,7 @@ def build_method_validators(w3: "Web3", method: RPCEndpoint) -> FormattersDict:
 
 
 async def async_build_method_validators(
-    async_w3: "AsyncWeb3", method: RPCEndpoint
+    async_w3: "AsyncWeb3[Any]", method: RPCEndpoint
 ) -> FormattersDict:
     request_formatters: Formatters = {}
     if RPCEndpoint(method) in METHODS_TO_VALIDATE:

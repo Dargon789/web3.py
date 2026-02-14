@@ -1,7 +1,4 @@
 import pytest
-from typing import (
-    Type,
-)
 
 from eth_utils import (
     event_signature_to_log_topic,
@@ -19,19 +16,10 @@ from web3._utils.module_testing.utils import (
     RequestMocker,
 )
 
-from .utils import (
-    get_open_port,
-)
-
 
 @pytest.fixture(scope="module", params=[lambda x: to_bytes(hexstr=x), identity])
 def address_conversion_func(request):
     return request.param
-
-
-@pytest.fixture()
-def open_port():
-    return get_open_port()
 
 
 # --- session-scoped constants --- #
@@ -120,5 +108,5 @@ def emitter_contract_log_topics():
 
 
 @pytest_asyncio.fixture(scope="function")
-def request_mocker() -> Type[RequestMocker]:
+def request_mocker() -> type[RequestMocker]:
     return RequestMocker

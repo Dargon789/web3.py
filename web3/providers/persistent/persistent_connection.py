@@ -1,8 +1,6 @@
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
-    Union,
     cast,
 )
 
@@ -30,12 +28,12 @@ class PersistentConnection:
     via a `AsyncWeb3` instance instantiated with a `PersistentConnectionProvider` class.
     """
 
-    def __init__(self, w3: "AsyncWeb3"):
+    def __init__(self, w3: "AsyncWeb3[Any]"):
         self._manager = w3.manager
         self.provider = cast("PersistentConnectionProvider", self._manager.provider)
 
     @property
-    def subscriptions(self) -> Dict[str, Any]:
+    def subscriptions(self) -> dict[str, Any]:
         """
         Return the active subscriptions on the persistent connection.
 
@@ -70,7 +68,7 @@ class PersistentConnection:
         """
         await self._manager.send(method, params)
 
-    async def recv(self) -> Union[RPCResponse, FormattedEthSubscriptionResponse]:
+    async def recv(self) -> RPCResponse | FormattedEthSubscriptionResponse:
         """
         Receive the next unprocessed response for a request from the persistent
         connection.

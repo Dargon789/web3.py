@@ -1,7 +1,7 @@
+import pytest
 import json
 import os
 import pathlib
-import pytest
 import socket
 import tempfile
 from threading import (
@@ -360,7 +360,7 @@ async def test_async_ipc_provider_write_messages_end_with_new_line_delimiter(
     async with AsyncWeb3(AsyncIPCProvider(pathlib.Path(jsonrpc_ipc_pipe_path))) as w3:
         w3.provider._writer.write = Mock()
         w3.provider._reader.readline = AsyncMock(
-            return_value=b'{"id": 0, "result": {}}\n'
+            return_value=b'{"id": 0, "jsonrpc": "2.0", "result": {}}\n'
         )
 
         await w3.provider.make_request("method", [])
@@ -374,16 +374,18 @@ async def test_persistent_connection_provider_empty_batch_response(
     simple_ipc_server,
     jsonrpc_ipc_pipe_path,
 ):
-    async with AsyncWeb3(
-        AsyncIPCProvider(pathlib.Path(jsonrpc_ipc_pipe_path))
-    ) as async_w3:
-        async_w3.provider._reader.readline = AsyncMock()
-        async_w3.provider._reader.readline.return_value = (
-            b'{"jsonrpc": "2.0","id":null,"error": {"code": -32600, "message": '
-            b'"empty batch"}}\n'
-        )
-        async with async_w3.batch_requests() as batch:
-            with pytest.raises(Web3RPCError, match="empty batch"):
+    with pytest.raises(Web3RPCError, match="empty batch"):
+        async with AsyncWeb3(
+            AsyncIPCProvider(pathlib.Path(jsonrpc_ipc_pipe_path))
+        ) as async_w3:
+            async_w3.provider._reader.readline = AsyncMock(
+                return_value=(
+                    b'{"jsonrpc": "2.0","id":null,"error": {"code": -32600, "message": '
+                    b'"empty batch"}}\n'
+                )
+            )
+            async with async_w3.batch_requests() as batch:
+                assert async_w3.provider._is_batching
                 await batch.async_execute()
 
         # assert that even though there was an error, we have reset the batching state

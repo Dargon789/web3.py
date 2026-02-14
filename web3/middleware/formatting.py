@@ -4,7 +4,6 @@ from typing import (
     Callable,
     Coroutine,
     Literal,
-    Optional,
     Union,
     cast,
 )
@@ -16,6 +15,7 @@ from eth_utils.toolz import (
 )
 
 from web3.exceptions import (
+    BadResponseFormat,
     Web3ValueError,
 )
 from web3.middleware.base import (
@@ -77,7 +77,12 @@ def _apply_response_formatters(
                 response, response_type, method_response_formatter(appropriate_response)
             )
 
-    if response.get("result") is not None and method in result_formatters:
+    if not isinstance(response, dict):
+        raise BadResponseFormat(
+            "Malformed response: expected a valid JSON-RPC response object, got: "
+            "`{}`".format(response)
+        )
+    elif response.get("result") is not None and method in result_formatters:
         return _format_response("result", result_formatters[method])
     elif (
         # eth_subscription responses
@@ -94,7 +99,7 @@ def _apply_response_formatters(
 
 SYNC_FORMATTERS_BUILDER = Callable[["Web3", RPCEndpoint], FormattersDict]
 ASYNC_FORMATTERS_BUILDER = Callable[
-    ["AsyncWeb3", RPCEndpoint], Coroutine[Any, Any, FormattersDict]
+    ["AsyncWeb3[Any]", RPCEndpoint], Coroutine[Any, Any, FormattersDict]
 ]
 
 
@@ -108,14 +113,14 @@ class FormattingMiddlewareBuilder(Web3MiddlewareBuilder):
     @staticmethod
     @curry
     def build(
-        w3: Union["AsyncWeb3", "Web3"],
+        w3: Union["Web3", "AsyncWeb3[Any]"],
         # formatters option:
-        request_formatters: Optional[Formatters] = None,
-        result_formatters: Optional[Formatters] = None,
-        error_formatters: Optional[Formatters] = None,
+        request_formatters: Formatters | None = None,
+        result_formatters: Formatters | None = None,
+        error_formatters: Formatters | None = None,
         # formatters builder option:
-        sync_formatters_builder: Optional[SYNC_FORMATTERS_BUILDER] = None,
-        async_formatters_builder: Optional[ASYNC_FORMATTERS_BUILDER] = None,
+        sync_formatters_builder: SYNC_FORMATTERS_BUILDER | None = None,
+        async_formatters_builder: ASYNC_FORMATTERS_BUILDER | None = None,
     ) -> "FormattingMiddlewareBuilder":
         # if not both sync and async formatters are specified, raise error
         if (
@@ -180,7 +185,7 @@ class FormattingMiddlewareBuilder(Web3MiddlewareBuilder):
             formatters = merge(
                 FORMATTER_DEFAULTS,
                 await self.async_formatters_builder(
-                    cast("AsyncWeb3", self._w3), method
+                    cast("AsyncWeb3[Any]", self._w3), method
                 ),
             )
             self.request_formatters = formatters.pop("request_formatters")
@@ -198,7 +203,7 @@ class FormattingMiddlewareBuilder(Web3MiddlewareBuilder):
             formatters = merge(
                 FORMATTER_DEFAULTS,
                 await self.async_formatters_builder(
-                    cast("AsyncWeb3", self._w3), method
+                    cast("AsyncWeb3[Any]", self._w3), method
                 ),
             )
             self.result_formatters = formatters["result_formatters"]

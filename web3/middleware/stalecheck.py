@@ -2,7 +2,6 @@ import time
 from typing import (  # noqa: F401
     TYPE_CHECKING,
     Any,
-    Callable,
     Collection,
     Dict,
     Optional,
@@ -45,13 +44,13 @@ def _is_fresh(block: BlockData, allowable_delay: int) -> bool:
 class StalecheckMiddlewareBuilder(Web3MiddlewareBuilder):
     allowable_delay: int
     skip_stalecheck_for_methods: Collection[str]
-    cache: Dict[str, Optional[BlockData]]
+    cache: dict[str, BlockData | None]
 
     @staticmethod
     @curry
     def build(
         allowable_delay: int,
-        w3: Union["Web3", "AsyncWeb3"],
+        w3: Union["Web3", "AsyncWeb3[Any]"],
         skip_stalecheck_for_methods: Collection[str] = SKIP_STALECHECK_FOR_METHODS,
     ) -> Web3Middleware:
         if allowable_delay <= 0:
@@ -82,7 +81,7 @@ class StalecheckMiddlewareBuilder(Web3MiddlewareBuilder):
     async def async_request_processor(self, method: "RPCEndpoint", params: Any) -> Any:
         if method not in self.skip_stalecheck_for_methods:
             if not _is_fresh(self.cache["latest"], self.allowable_delay):
-                w3 = cast("AsyncWeb3", self._w3)
+                w3 = cast("AsyncWeb3[Any]", self._w3)
                 latest = await w3.eth.get_block("latest")
 
                 if _is_fresh(latest, self.allowable_delay):

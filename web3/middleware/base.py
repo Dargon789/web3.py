@@ -4,9 +4,6 @@ from abc import (
 from typing import (
     TYPE_CHECKING,
     Any,
-    List,
-    Tuple,
-    Type,
     Union,
 )
 
@@ -35,9 +32,9 @@ class Web3Middleware:
     but instead inherited from.
     """
 
-    _w3: Union["AsyncWeb3", "Web3"]
+    _w3: Union["AsyncWeb3[Any]", "Web3"]
 
-    def __init__(self, w3: Union["AsyncWeb3", "Web3"]) -> None:
+    def __init__(self, w3: Union["AsyncWeb3[Any]", "Web3"]) -> None:
         self._w3 = w3
 
     def __hash__(self) -> int:
@@ -61,8 +58,8 @@ class Web3Middleware:
         self, make_batch_request: "MakeBatchRequestFn"
     ) -> "MakeBatchRequestFn":
         def middleware(
-            requests_info: List[Tuple["RPCEndpoint", Any]]
-        ) -> Union[List["RPCResponse"], "RPCResponse"]:
+            requests_info: list[tuple["RPCEndpoint", Any]],
+        ) -> Union[list["RPCResponse"], "RPCResponse"]:
             req_processed = [
                 self.request_processor(method, params)
                 for (method, params) in requests_info
@@ -106,8 +103,8 @@ class Web3Middleware:
         self, make_batch_request: "AsyncMakeBatchRequestFn"
     ) -> "AsyncMakeBatchRequestFn":
         async def middleware(
-            requests_info: List[Tuple["RPCEndpoint", Any]]
-        ) -> Union[List["RPCResponse"], "RPCResponse"]:
+            requests_info: list[tuple["RPCEndpoint", Any]],
+        ) -> Union[list["RPCResponse"], "RPCResponse"]:
             req_processed = [
                 await self.async_request_processor(method, params)
                 for (method, params) in requests_info
@@ -145,7 +142,7 @@ class Web3MiddlewareBuilder(Web3Middleware):
     @staticmethod
     @abstractmethod
     def build(
-        w3: Union["AsyncWeb3", "Web3"],
+        w3: Union["AsyncWeb3[Any]", "Web3"],
         *args: Any,
         **kwargs: Any,
     ) -> Web3Middleware:
@@ -186,5 +183,5 @@ class Web3MiddlewareBuilder(Web3Middleware):
 
 # --- type definitions --- #
 
-Middleware = Type[Web3Middleware]
+Middleware = type[Web3Middleware]
 MiddlewareOnion = NamedElementOnion[str, Middleware]

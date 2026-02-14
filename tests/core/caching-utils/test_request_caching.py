@@ -1,11 +1,7 @@
-import itertools
 import pytest
+import itertools
 import threading
 import time
-from typing import (
-    Optional,
-    Union,
-)
 import uuid
 
 import pytest_asyncio
@@ -16,7 +12,6 @@ from web3 import (
     AsyncWeb3,
     HTTPProvider,
     IPCProvider,
-    LegacyWebSocketProvider,
     PersistentConnectionProvider,
     Web3,
     WebSocketProvider,
@@ -48,7 +43,6 @@ from web3.utils import (
 SYNC_PROVIDERS = [
     HTTPProvider,
     IPCProvider,
-    LegacyWebSocketProvider,  # deprecated
 ]
 ASYNC_PROVIDERS = [
     AsyncHTTPProvider,
@@ -204,7 +198,7 @@ def test_all_providers_do_not_cache_by_default_and_can_set_caching_properties(pr
     "threshold",
     (RequestCacheValidationThreshold.FINALIZED, RequestCacheValidationThreshold.SAFE),
 )
-@pytest.mark.parametrize("endpoint", BLOCKNUM_IN_PARAMS | BLOCK_IN_RESULT)
+@pytest.mark.parametrize("endpoint", sorted(BLOCKNUM_IN_PARAMS | BLOCK_IN_RESULT))
 @pytest.mark.parametrize(
     "blocknum,should_cache",
     (
@@ -254,7 +248,7 @@ def test_blocknum_validation_against_validation_threshold_when_caching_mainnet(
     "threshold",
     (RequestCacheValidationThreshold.FINALIZED, RequestCacheValidationThreshold.SAFE),
 )
-@pytest.mark.parametrize("endpoint", BLOCKNUM_IN_PARAMS)
+@pytest.mark.parametrize("endpoint", sorted(BLOCKNUM_IN_PARAMS))
 @pytest.mark.parametrize(
     "block_id,blocknum,should_cache",
     (
@@ -297,7 +291,7 @@ def test_block_id_param_caching_mainnet(
     "threshold",
     (RequestCacheValidationThreshold.FINALIZED, RequestCacheValidationThreshold.SAFE),
 )
-@pytest.mark.parametrize("endpoint", BLOCKHASH_IN_PARAMS)
+@pytest.mark.parametrize("endpoint", sorted(BLOCKHASH_IN_PARAMS))
 @pytest.mark.parametrize(
     "blocknum,should_cache",
     (
@@ -360,7 +354,7 @@ def test_request_caching_validation_threshold_defaults(
 
 
 @pytest.mark.parametrize(
-    "endpoint", BLOCKNUM_IN_PARAMS | BLOCK_IN_RESULT | BLOCKHASH_IN_PARAMS
+    "endpoint", sorted(BLOCKNUM_IN_PARAMS | BLOCK_IN_RESULT | BLOCKHASH_IN_PARAMS)
 )
 @pytest.mark.parametrize(
     "time_from_threshold,should_cache",
@@ -436,7 +430,7 @@ def test_sync_validation_against_validation_threshold_time_based(
     ),
 )
 @pytest.mark.parametrize(
-    "endpoint", BLOCKNUM_IN_PARAMS | BLOCK_IN_RESULT | BLOCKHASH_IN_PARAMS
+    "endpoint", sorted(BLOCKNUM_IN_PARAMS | BLOCK_IN_RESULT | BLOCKHASH_IN_PARAMS)
 )
 def test_validation_against_validation_threshold_time_based_configured(
     time_from_threshold, should_cache, chain_id, endpoint, sync_provider, request_mocker
@@ -496,7 +490,7 @@ async def async_provider(request):
 
 async def _async_w3_init(
     async_provider,
-    threshold: Optional[Union[RequestCacheValidationThreshold, int]] = "empty",
+    threshold: RequestCacheValidationThreshold | int | None = "empty",
 ):
     if isinstance(async_provider, PersistentConnectionProvider):
         _async_w3 = await AsyncWeb3(
@@ -642,7 +636,7 @@ async def test_async_request_caching_does_not_share_state_between_providers(
     "threshold",
     (RequestCacheValidationThreshold.FINALIZED, RequestCacheValidationThreshold.SAFE),
 )
-@pytest.mark.parametrize("endpoint", BLOCKNUM_IN_PARAMS | BLOCK_IN_RESULT)
+@pytest.mark.parametrize("endpoint", sorted(BLOCKNUM_IN_PARAMS | BLOCK_IN_RESULT))
 @pytest.mark.parametrize(
     "blocknum,should_cache",
     (
@@ -689,7 +683,7 @@ async def test_async_blocknum_validation_against_validation_threshold_mainnet(
     "threshold",
     (RequestCacheValidationThreshold.FINALIZED, RequestCacheValidationThreshold.SAFE),
 )
-@pytest.mark.parametrize("endpoint", BLOCKNUM_IN_PARAMS)
+@pytest.mark.parametrize("endpoint", sorted(BLOCKNUM_IN_PARAMS))
 @pytest.mark.parametrize(
     "block_id,blocknum,should_cache",
     (
@@ -735,7 +729,7 @@ async def test_async_block_id_param_caching_mainnet(
     "threshold",
     (RequestCacheValidationThreshold.FINALIZED, RequestCacheValidationThreshold.SAFE),
 )
-@pytest.mark.parametrize("endpoint", BLOCKHASH_IN_PARAMS)
+@pytest.mark.parametrize("endpoint", sorted(BLOCKHASH_IN_PARAMS))
 @pytest.mark.parametrize(
     "blocknum,should_cache",
     (
@@ -794,7 +788,7 @@ async def test_async_request_caching_validation_threshold_defaults(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "endpoint", BLOCKNUM_IN_PARAMS | BLOCK_IN_RESULT | BLOCKHASH_IN_PARAMS
+    "endpoint", sorted(BLOCKNUM_IN_PARAMS | BLOCK_IN_RESULT | BLOCKHASH_IN_PARAMS)
 )
 @pytest.mark.parametrize(
     "time_from_threshold,should_cache",
@@ -856,7 +850,7 @@ async def test_async_validation_against_validation_threshold_time_based(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "endpoint", BLOCKNUM_IN_PARAMS | BLOCK_IN_RESULT | BLOCKHASH_IN_PARAMS
+    "endpoint", sorted(BLOCKNUM_IN_PARAMS | BLOCK_IN_RESULT | BLOCKHASH_IN_PARAMS)
 )
 @pytest.mark.parametrize("blocknum", ("0x0", "0x1", "0x2", "0x3", "0x4", "0x5"))
 async def test_async_request_caching_with_validation_threshold_set_to_none(
@@ -901,7 +895,7 @@ async def test_async_request_caching_with_validation_threshold_set_to_none(
     ),
 )
 @pytest.mark.parametrize(
-    "endpoint", BLOCKNUM_IN_PARAMS | BLOCK_IN_RESULT | BLOCKHASH_IN_PARAMS
+    "endpoint", sorted(BLOCKNUM_IN_PARAMS | BLOCK_IN_RESULT | BLOCKHASH_IN_PARAMS)
 )
 async def test_async_validation_against_validation_threshold_time_based_configured(
     time_from_threshold,

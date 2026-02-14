@@ -6,12 +6,7 @@ from typing import (
     AsyncGenerator,
     Callable,
     Coroutine,
-    Dict,
-    List,
-    NoReturn,
-    Optional,
     Sequence,
-    Tuple,
     Union,
     cast,
 )
@@ -32,17 +27,19 @@ from web3._utils.caching import (
 from web3._utils.compat import (
     Self,
 )
+from web3._utils.formatters import (
+    apply_null_result_formatters,
+)
+from web3._utils.validation import (
+    raise_error_for_batch_response,
+    validate_rpc_response_and_raise_if_error,
+)
 from web3.datastructures import (
     NamedElementOnion,
 )
 from web3.exceptions import (
-    BadResponseFormat,
-    MethodUnavailable,
     ProviderConnectionError,
-    RequestTimedOut,
     TaskNotRunning,
-    TransactionNotFound,
-    Web3RPCError,
     Web3TypeError,
 )
 from web3.method import (
@@ -95,200 +92,6 @@ if TYPE_CHECKING:
 
 
 NULL_RESPONSES = [None, HexBytes("0x"), "0x"]
-KNOWN_REQUEST_TIMEOUT_MESSAGING = {
-    # Note: It's important to be very explicit here and not too broad. We don't want
-    # to accidentally catch a message that is not for a request timeout. In the worst
-    # case, we raise something more generic like `Web3RPCError`. JSON-RPC unfortunately
-    # has not standardized error codes for request timeouts.
-    "request timed out",  # go-ethereum
-}
-METHOD_NOT_FOUND = -32601
-
-
-def _raise_bad_response_format(response: RPCResponse, error: str = "") -> None:
-    message = "The response was in an unexpected format and unable to be parsed."
-    raw_response = f"The raw response is: {response}"
-
-    if error is not None and error != "":
-        error = error[:-1] if error.endswith(".") else error
-        message = f"{message} {error}. {raw_response}"
-    else:
-        message = f"{message} {raw_response}"
-
-    raise BadResponseFormat(message)
-
-
-def apply_error_formatters(
-    error_formatters: Callable[..., Any],
-    response: RPCResponse,
-) -> RPCResponse:
-    if error_formatters:
-        formatted_resp = pipe(response, error_formatters)
-        return formatted_resp
-    else:
-        return response
-
-
-def apply_null_result_formatters(
-    null_result_formatters: Callable[..., Any],
-    response: RPCResponse,
-    params: Optional[Any] = None,
-) -> RPCResponse:
-    if null_result_formatters:
-        formatted_resp = pipe(params, null_result_formatters)
-        return formatted_resp
-    else:
-        return response
-
-
-def _validate_subscription_fields(response: RPCResponse) -> None:
-    params = response["params"]
-    subscription = params["subscription"]
-    if not isinstance(subscription, str) and not len(subscription) == 34:
-        _raise_bad_response_format(
-            response, "eth_subscription 'params' must include a 'subscription' field."
-        )
-
-
-def _validate_response(
-    response: RPCResponse,
-    error_formatters: Optional[Callable[..., Any]],
-    is_subscription_response: bool = False,
-    logger: Optional[logging.Logger] = None,
-    params: Optional[Any] = None,
-) -> None:
-    if "jsonrpc" not in response or response["jsonrpc"] != "2.0":
-        _raise_bad_response_format(
-            response, 'The "jsonrpc" field must be present with a value of "2.0".'
-        )
-
-    response_id = response.get("id")
-    if "id" in response:
-        int_error_msg = (
-            '"id" must be an integer or a string representation of an integer.'
-        )
-        if response_id is None and "error" in response:
-            # errors can sometimes have null `id`, according to the JSON-RPC spec
-            pass
-        elif not isinstance(response_id, (str, int)):
-            _raise_bad_response_format(response, int_error_msg)
-        elif isinstance(response_id, str):
-            try:
-                int(response_id)
-            except ValueError:
-                _raise_bad_response_format(response, int_error_msg)
-    elif is_subscription_response:
-        # if `id` is not present, this must be a subscription response
-        _validate_subscription_fields(response)
-    else:
-        _raise_bad_response_format(
-            response,
-            'Response must include an "id" field or be formatted as an '
-            "`eth_subscription` response.",
-        )
-
-    if all(key in response for key in {"error", "result"}):
-        _raise_bad_response_format(
-            response, 'Response cannot include both "error" and "result".'
-        )
-    elif (
-        not any(key in response for key in {"error", "result"})
-        and not is_subscription_response
-    ):
-        _raise_bad_response_format(
-            response, 'Response must include either "error" or "result".'
-        )
-    elif "error" in response:
-        web3_rpc_error: Optional[Web3RPCError] = None
-        error = response["error"]
-
-        # raise the error when the value is a string
-        if error is None or not isinstance(error, dict):
-            _raise_bad_response_format(
-                response,
-                'response["error"] must be a valid object as defined by the '
-                "JSON-RPC 2.0 specification.",
-            )
-
-        # errors must include a message
-        error_message = error.get("message")
-        if not isinstance(error_message, str):
-            _raise_bad_response_format(
-                response, 'error["message"] is required and must be a string value.'
-            )
-        elif error_message == "transaction not found":
-            transaction_hash = params[0]
-            web3_rpc_error = TransactionNotFound(
-                repr(error),
-                rpc_response=response,
-                user_message=(f"Transaction with hash {transaction_hash!r} not found."),
-            )
-
-        # errors must include an integer code
-        code = error.get("code")
-        if not isinstance(code, int):
-            _raise_bad_response_format(
-                response, 'error["code"] is required and must be an integer value.'
-            )
-        elif code == METHOD_NOT_FOUND:
-            web3_rpc_error = MethodUnavailable(
-                repr(error),
-                rpc_response=response,
-                user_message=(
-                    "This method is not available. Check your node provider or your "
-                    "client's API docs to see what methods are supported and / or "
-                    "currently enabled."
-                ),
-            )
-        elif any(
-            # parse specific timeout messages
-            timeout_str in error_message.lower()
-            for timeout_str in KNOWN_REQUEST_TIMEOUT_MESSAGING
-        ):
-            web3_rpc_error = RequestTimedOut(
-                repr(error),
-                rpc_response=response,
-                user_message=(
-                    "The request timed out. Check the connection to your node and "
-                    "try again."
-                ),
-            )
-
-        if web3_rpc_error is None:
-            # if no condition was met above, raise a more generic `Web3RPCError`
-            web3_rpc_error = Web3RPCError(repr(error), rpc_response=response)
-
-        response = apply_error_formatters(error_formatters, response)
-        logger.debug(f"RPC error response: {response}")
-
-        raise web3_rpc_error
-
-    elif "result" not in response and not is_subscription_response:
-        _raise_bad_response_format(response)
-
-
-def _raise_error_for_batch_response(
-    response: RPCResponse,
-    logger: Optional[logging.Logger] = None,
-) -> NoReturn:
-    error = response.get("error")
-    if error is None:
-        _raise_bad_response_format(
-            response,
-            "Batch response must be formatted as a list of responses or "
-            "as a single JSON-RPC error response.",
-        )
-    _validate_response(
-        response,
-        None,
-        is_subscription_response=False,
-        logger=logger,
-        params=[],
-    )
-    # This should not be reached, but if it is, raise a generic `BadResponseFormat`
-    raise BadResponseFormat(
-        "Batch response was in an unexpected format and unable to be parsed."
-    )
 
 
 class RequestManager:
@@ -298,9 +101,9 @@ class RequestManager:
 
     def __init__(
         self,
-        w3: Union["AsyncWeb3", "Web3"],
-        provider: Optional[Union["BaseProvider", "AsyncBaseProvider"]] = None,
-        middleware: Optional[Sequence[Tuple[Middleware, str]]] = None,
+        w3: Union["AsyncWeb3[Any]", "Web3"],
+        provider: Union["BaseProvider", "AsyncBaseProvider"] | None = None,
+        middleware: Sequence[tuple[Middleware, str]] | None = None,
     ) -> None:
         self.w3 = w3
 
@@ -329,7 +132,7 @@ class RequestManager:
         self._provider = provider
 
     @staticmethod
-    def get_default_middleware() -> List[Tuple[Middleware, str]]:
+    def get_default_middleware() -> list[tuple[Middleware, str]]:
         """
         List the default middleware for the request manager.
         Documentation should remain in sync with these defaults.
@@ -346,23 +149,24 @@ class RequestManager:
     # Provider requests and response
     #
     def _make_request(
-        self, method: Union[RPCEndpoint, Callable[..., RPCEndpoint]], params: Any
+        self, method: RPCEndpoint | Callable[..., RPCEndpoint], params: Any
     ) -> RPCResponse:
         provider = cast("BaseProvider", self.provider)
         request_func = provider.request_func(
             cast("Web3", self.w3), cast("MiddlewareOnion", self.middleware_onion)
         )
-        self.logger.debug(f"Making request. Method: {method}")
+        self.logger.debug("Making request. Method: %s", method)
         return request_func(method, params)
 
     async def _coro_make_request(
-        self, method: Union[RPCEndpoint, Callable[..., RPCEndpoint]], params: Any
+        self, method: RPCEndpoint | Callable[..., RPCEndpoint], params: Any
     ) -> RPCResponse:
         provider = cast("AsyncBaseProvider", self.provider)
         request_func = await provider.request_func(
-            cast("AsyncWeb3", self.w3), cast("MiddlewareOnion", self.middleware_onion)
+            cast("AsyncWeb3[Any]", self.w3),
+            cast("MiddlewareOnion", self.middleware_onion),
         )
-        self.logger.debug(f"Making request. Method: {method}")
+        self.logger.debug("Making request. Method: %s", method)
         return await request_func(method, params)
 
     #
@@ -378,8 +182,8 @@ class RequestManager:
         self,
         response: RPCResponse,
         params: Any,
-        error_formatters: Optional[Callable[..., Any]] = None,
-        null_result_formatters: Optional[Callable[..., Any]] = None,
+        error_formatters: Callable[..., Any] | None = None,
+        null_result_formatters: Callable[..., Any] | None = None,
     ) -> Any:
         is_subscription_response = (
             response.get("method") == "eth_subscription"
@@ -388,7 +192,7 @@ class RequestManager:
             and response["params"].get("result") is not None
         )
 
-        _validate_response(
+        validate_rpc_response_and_raise_if_error(
             response,
             error_formatters,
             is_subscription_response=is_subscription_response,
@@ -413,10 +217,10 @@ class RequestManager:
 
     def request_blocking(
         self,
-        method: Union[RPCEndpoint, Callable[..., RPCEndpoint]],
+        method: RPCEndpoint | Callable[..., RPCEndpoint],
         params: Any,
-        error_formatters: Optional[Callable[..., Any]] = None,
-        null_result_formatters: Optional[Callable[..., Any]] = None,
+        error_formatters: Callable[..., Any] | None = None,
+        null_result_formatters: Callable[..., Any] | None = None,
     ) -> Any:
         """
         Make a synchronous request using the provider
@@ -428,10 +232,10 @@ class RequestManager:
 
     async def coro_request(
         self,
-        method: Union[RPCEndpoint, Callable[..., RPCEndpoint]],
+        method: RPCEndpoint | Callable[..., RPCEndpoint],
         params: Any,
-        error_formatters: Optional[Callable[..., Any]] = None,
-        null_result_formatters: Optional[Callable[..., Any]] = None,
+        error_formatters: Callable[..., Any] | None = None,
+        null_result_formatters: Callable[..., Any] | None = None,
     ) -> Any:
         """
         Coroutine for making a request using the provider
@@ -447,15 +251,15 @@ class RequestManager:
         """
         Context manager for making batch requests
         """
-        if isinstance(self.provider, AutoProvider):
-            self.provider = self.provider._get_active_provider(use_cache=True)
-        if not isinstance(self.provider, (AsyncJSONBaseProvider, JSONBaseProvider)):
+        if not isinstance(
+            self.provider, (AsyncJSONBaseProvider, JSONBaseProvider, AutoProvider)
+        ):
             raise Web3TypeError("Batch requests are not supported by this provider.")
         return RequestBatcher(self.w3)
 
     def _make_batch_request(
-        self, requests_info: List[Tuple[Tuple["RPCEndpoint", Any], Sequence[Any]]]
-    ) -> List[RPCResponse]:
+        self, requests_info: list[tuple[tuple["RPCEndpoint", Any], tuple[Any, ...]]]
+    ) -> list[RPCResponse]:
         """
         Make a batch request using the provider
         """
@@ -479,20 +283,20 @@ class RequestManager:
             return list(formatted_responses)
         else:
             # expect a single response with an error
-            _raise_error_for_batch_response(response, self.logger)
+            raise_error_for_batch_response(response, self.logger)
 
     async def _async_make_batch_request(
         self,
-        requests_info: List[
-            Coroutine[Any, Any, Tuple[Tuple["RPCEndpoint", Any], Sequence[Any]]]
+        requests_info: list[
+            Coroutine[Any, Any, tuple[tuple["RPCEndpoint", Any], tuple[Any]]]
         ],
-    ) -> List[RPCResponse]:
+    ) -> list[RPCResponse]:
         """
         Make an asynchronous batch request using the provider
         """
         provider = cast(AsyncJSONBaseProvider, self.provider)
         request_func = await provider.batch_request_func(
-            cast("AsyncWeb3", self.w3),
+            cast("AsyncWeb3[Any]", self.w3),
             cast("MiddlewareOnion", self.middleware_onion),
         )
         # since we add items to the batch without awaiting, we unpack the coroutines
@@ -507,14 +311,7 @@ class RequestManager:
 
         if isinstance(response, list):
             # expected format
-            response = cast(List[RPCResponse], response)
-            if isinstance(self.provider, PersistentConnectionProvider):
-                # call _process_response for each response in the batch
-                return [
-                    cast(RPCResponse, await self._process_response(resp))
-                    for resp in response
-                ]
-
+            response = cast(list[RPCResponse], response)
             formatted_responses = [
                 self._format_batched_response(info, resp)
                 for info, resp in zip(unpacked_requests_info, response)
@@ -522,15 +319,95 @@ class RequestManager:
             return list(formatted_responses)
         else:
             # expect a single response with an error
-            _raise_error_for_batch_response(response, self.logger)
+            raise_error_for_batch_response(response, self.logger)
+
+    async def _async_send_batch(
+        self, requests: list[tuple["RPCEndpoint", Any]]
+    ) -> list[RPCRequest]:
+        """
+        Send a batch request via socket.
+        """
+        if not isinstance(self._provider, PersistentConnectionProvider):
+            raise Web3TypeError(
+                "Only providers that maintain an open, persistent connection "
+                "can send batch requests."
+            )
+        send_func = await self._provider.send_batch_func(
+            cast("AsyncWeb3[Any]", self.w3),
+            cast("MiddlewareOnion", self.middleware_onion),
+        )
+        self.logger.debug(
+            "Sending batch request to open socket connection: %s",
+            self._provider.get_endpoint_uri_or_ipc_path(),
+        )
+        return await send_func(requests)
+
+    async def _async_recv_batch(self, requests: list[RPCRequest]) -> list[RPCResponse]:
+        """
+        Receive a batch request via socket.
+        """
+        if not isinstance(self._provider, PersistentConnectionProvider):
+            raise Web3TypeError(
+                "Only providers that maintain an open, persistent connection "
+                "can receive batch requests."
+            )
+        recv_func = await self._provider.recv_batch_func(
+            cast("AsyncWeb3[Any]", self.w3),
+            cast("MiddlewareOnion", self.middleware_onion),
+        )
+        self.logger.debug(
+            "Receiving batch request from open socket connection: %s",
+            self._provider.get_endpoint_uri_or_ipc_path(),
+        )
+        return await recv_func(requests)
+
+    async def _async_make_socket_batch_request(
+        self,
+        requests_info: list[
+            Coroutine[Any, Any, tuple[tuple["RPCEndpoint", Any], tuple[Any, ...]]]
+        ],
+    ) -> list[RPCResponse]:
+        """
+        Send and receive a batch request via a socket.
+        """
+        if not isinstance(self._provider, PersistentConnectionProvider):
+            raise Web3TypeError(
+                "Only providers that maintain an open, persistent connection "
+                "can send and receive batch requests."
+            )
+
+        unpacked_requests_info = await asyncio.gather(*requests_info)
+        reqs = [req for req, _ in unpacked_requests_info]
+        response_formatters = [resp_f for _, resp_f in unpacked_requests_info]
+
+        requests = await self._async_send_batch(reqs)
+
+        for i, request in enumerate(requests):
+            self._provider._request_processor.cache_request_information(
+                request["id"],
+                request["method"],
+                request["params"],
+                response_formatters=response_formatters[i],
+            )
+
+        responses = await self._async_recv_batch(requests)
+        if isinstance(responses, list):
+            # expected format
+            return [
+                cast(RPCResponse, await self._process_response(resp))
+                for resp in responses
+            ]
+        else:
+            # expect a single response with an error
+            raise_error_for_batch_response(responses, self.logger)
 
     def _format_batched_response(
         self,
-        requests_info: Tuple[Tuple[RPCEndpoint, Any], Sequence[Any]],
+        requests_info: tuple[tuple[RPCEndpoint, Any], Sequence[Any]],
         response: RPCResponse,
     ) -> RPCResponse:
         result_formatters, error_formatters, null_result_formatters = requests_info[1]
-        _validate_response(
+        validate_rpc_response_and_raise_if_error(
             response,
             error_formatters,
             is_subscription_response=False,
@@ -553,15 +430,19 @@ class RequestManager:
         self,
         method: RPCEndpoint,
         params: Any,
-        response_formatters: Optional[
-            Tuple[Dict[str, Callable[..., Any]], Callable[..., Any], Callable[..., Any]]
-        ] = None,
+        response_formatters: None
+        | (
+            tuple[dict[str, Callable[..., Any]], Callable[..., Any], Callable[..., Any]]
+        ) = None,
     ) -> RPCResponse:
         provider = cast(PersistentConnectionProvider, self._provider)
         self.logger.debug(
-            "Making request to open socket connection and waiting for response: "
-            f"{provider.get_endpoint_uri_or_ipc_path()},\n    method: {method},\n"
-            f"    params: {params}"
+            "Making request to open socket connection and waiting for response: %s,\n"
+            "    method: %s,\n"
+            "    params: %s",
+            provider.get_endpoint_uri_or_ipc_path(),
+            method,
+            params,
         )
         rpc_request = await self.send(method, params)
         provider._request_processor.cache_request_information(
@@ -574,22 +455,25 @@ class RequestManager:
 
     async def send(self, method: RPCEndpoint, params: Any) -> RPCRequest:
         provider = cast(PersistentConnectionProvider, self._provider)
-        async_w3 = cast("AsyncWeb3", self.w3)
+        async_w3 = cast("AsyncWeb3[Any]", self.w3)
         middleware_onion = cast("MiddlewareOnion", self.middleware_onion)
         send_func = await provider.send_func(
             async_w3,
             middleware_onion,
         )
         self.logger.debug(
-            "Sending request to open socket connection: "
-            f"{provider.get_endpoint_uri_or_ipc_path()},\n    method: {method},\n"
-            f"    params: {params}"
+            "Sending request to open socket connection: %s,\n"
+            "    method: %s,\n"
+            "    params: %s",
+            provider.get_endpoint_uri_or_ipc_path(),
+            method,
+            params,
         )
         return await send_func(method, params)
 
     async def recv_for_request(self, rpc_request: RPCRequest) -> RPCResponse:
         provider = cast(PersistentConnectionProvider, self._provider)
-        async_w3 = cast("AsyncWeb3", self.w3)
+        async_w3 = cast("AsyncWeb3[Any]", self.w3)
         middleware_onion = cast("MiddlewareOnion", self.middleware_onion)
         recv_func = await provider.recv_func(
             async_w3,
@@ -597,7 +481,8 @@ class RequestManager:
         )
         self.logger.debug(
             "Getting response for request from open socket connection:\n"
-            f"    request: {rpc_request}"
+            "    request: %s",
+            rpc_request,
         )
         response = await recv_func(rpc_request)
         try:
@@ -607,11 +492,11 @@ class RequestManager:
             provider._request_processor._request_information_cache.pop(response_id_key)
             raise
 
-    async def recv(self) -> Union[RPCResponse, FormattedEthSubscriptionResponse]:
+    async def recv(self) -> RPCResponse | FormattedEthSubscriptionResponse:
         provider = cast(PersistentConnectionProvider, self._provider)
         self.logger.debug(
-            "Getting next response from open socket connection: "
-            f"{provider.get_endpoint_uri_or_ipc_path()}"
+            "Getting next response from open socket connection: %s",
+            provider.get_endpoint_uri_or_ipc_path(),
         )
         # pop from the queue since the listener task is responsible for reading
         # directly from the socket
@@ -636,7 +521,7 @@ class RequestManager:
                 "Only providers that maintain an open, persistent connection "
                 "can listen to streams."
             )
-        async_w3 = cast("AsyncWeb3", self.w3)
+        async_w3 = cast("AsyncWeb3[Any]", self.w3)
 
         if self._provider._message_listener_task is None:
             raise ProviderConnectionError(
@@ -663,18 +548,15 @@ class RequestManager:
                 else:
                     # if not an active sub, skip processing and continue
                     continue
-            except TaskNotRunning:
+            except TaskNotRunning as e:
                 await asyncio.sleep(0)
                 self._provider._handle_listener_task_exceptions()
-                self.logger.error(
-                    "Message listener background task has stopped unexpectedly. "
-                    "Stopping message stream."
-                )
+                self.logger.error("Stopping message stream: %s", e.message)
                 return
 
     async def _process_response(
         self, response: RPCResponse
-    ) -> Union[RPCResponse, FormattedEthSubscriptionResponse]:
+    ) -> RPCResponse | FormattedEthSubscriptionResponse:
         provider = cast(PersistentConnectionProvider, self._provider)
         request_info = self._request_processor.get_request_information_for_response(
             response
@@ -694,9 +576,11 @@ class RequestManager:
                     # subscription as it comes in
                     request_info.subscription_id = subscription_id
                     provider.logger.debug(
-                        "Caching eth_subscription info:\n    "
-                        f"cache_key={cache_key},\n    "
-                        f"request_info={request_info.__dict__}"
+                        "Caching eth_subscription info:\n"
+                        "    cache_key=%s,\n"
+                        "    request_info=%s",
+                        cache_key,
+                        request_info.__dict__,
                     )
                     self._request_processor._request_information_cache.cache(
                         cache_key, request_info

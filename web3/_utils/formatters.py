@@ -1,12 +1,8 @@
-from collections.abc import (
-    Mapping,
-)
 from typing import (
     Any,
     Callable,
-    Dict,
     Iterable,
-    Tuple,
+    Mapping,
     TypeVar,
 )
 
@@ -26,10 +22,14 @@ from eth_utils.toolz import (
     compose,
     curry,
     dissoc,
+    pipe,
 )
 
 from web3._utils.decorators import (
     reject_recursive_repeats,
+)
+from web3.types import (
+    RPCResponse,
 )
 
 TReturn = TypeVar("TReturn")
@@ -92,8 +92,8 @@ def static_return(value: TValue) -> Callable[..., TValue]:
     return inner
 
 
-def static_result(value: TValue) -> Callable[..., Dict[str, TValue]]:
-    def inner(*args: Any, **kwargs: Any) -> Dict[str, TValue]:
+def static_result(value: TValue) -> Callable[..., dict[str, TValue]]:
+    def inner(*args: Any, **kwargs: Any) -> dict[str, TValue]:
         return {"result": value}
 
     return inner
@@ -102,8 +102,8 @@ def static_result(value: TValue) -> Callable[..., Dict[str, TValue]]:
 @curry
 @to_dict
 def apply_key_map(
-    key_mappings: Dict[Any, Any], value: Dict[Any, Any]
-) -> Iterable[Tuple[Any, Any]]:
+    key_mappings: dict[Any, Any], value: dict[Any, Any]
+) -> Iterable[tuple[Any, Any]]:
     for key, item in value.items():
         if key in key_mappings:
             yield key_mappings[key], item
@@ -125,9 +125,32 @@ def is_array_of_dicts(value: Any) -> bool:
 
 @curry
 def remove_key_if(
-    key: Any, remove_if: Callable[[Dict[Any, Any]], bool], input_dict: Dict[Any, Any]
-) -> Dict[Any, Any]:
+    key: Any, remove_if: Callable[[dict[Any, Any]], bool], input_dict: dict[Any, Any]
+) -> dict[Any, Any]:
     if key in input_dict and remove_if(input_dict):
         return dissoc(input_dict, key)
     else:
         return input_dict
+
+
+def apply_error_formatters(
+    error_formatters: Callable[..., Any],
+    response: RPCResponse,
+) -> RPCResponse:
+    if error_formatters:
+        formatted_resp = pipe(response, error_formatters)
+        return formatted_resp
+    else:
+        return response
+
+
+def apply_null_result_formatters(
+    null_result_formatters: Callable[..., Any],
+    response: RPCResponse,
+    params: Any | None = None,
+) -> RPCResponse:
+    if null_result_formatters:
+        formatted_resp = pipe(params, null_result_formatters)
+        return formatted_resp
+    else:
+        return response

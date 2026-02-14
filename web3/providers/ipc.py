@@ -14,10 +14,6 @@ from types import (
 )
 from typing import (
     Any,
-    List,
-    Tuple,
-    Type,
-    Union,
     cast,
 )
 
@@ -59,7 +55,7 @@ def get_ipc_socket(ipc_path: str, timeout: float = 2.0) -> socket.socket:
         return sock
 
 
-class PersistantSocket:
+class PersistentSocket:
     sock = None
 
     def __init__(self, ipc_path: str) -> None:
@@ -77,7 +73,7 @@ class PersistantSocket:
 
     def __exit__(
         self,
-        exc_type: Type[BaseException],
+        exc_type: type[BaseException],
         exc_value: BaseException,
         traceback: TracebackType,
     ) -> None:
@@ -143,7 +139,7 @@ class IPCProvider(JSONBaseProvider):
 
     def __init__(
         self,
-        ipc_path: Union[str, Path] = None,
+        ipc_path: str | Path = None,
         timeout: int = 30,
         **kwargs: Any,
     ) -> None:
@@ -157,7 +153,7 @@ class IPCProvider(JSONBaseProvider):
 
         self.timeout = timeout
         self._lock = threading.Lock()
-        self._socket = PersistantSocket(self.ipc_path)
+        self._socket = PersistentSocket(self.ipc_path)
 
     def __str__(self) -> str:
         return f"<{self.__class__.__name__} {self.ipc_path}>"
@@ -176,7 +172,7 @@ class IPCProvider(JSONBaseProvider):
                 while True:
                     try:
                         raw_response += sock.recv(4096)
-                    except socket.timeout:
+                    except TimeoutError:
                         timeout.sleep(0)
                         continue
                     if raw_response == b"":
@@ -196,17 +192,17 @@ class IPCProvider(JSONBaseProvider):
     @handle_request_caching
     def make_request(self, method: RPCEndpoint, params: Any) -> RPCResponse:
         self.logger.debug(
-            f"Making request IPC. Path: {self.ipc_path}, Method: {method}"
+            "Making request IPC. Path: %s, Method: %s", self.ipc_path, method
         )
         request = self.encode_rpc_request(method, params)
         return self._make_request(request)
 
     def make_batch_request(
-        self, requests: List[Tuple[RPCEndpoint, Any]]
-    ) -> List[RPCResponse]:
-        self.logger.debug(f"Making batch request IPC. Path: {self.ipc_path}")
+        self, requests: list[tuple[RPCEndpoint, Any]]
+    ) -> list[RPCResponse]:
+        self.logger.debug("Making batch request IPC. Path: %s", self.ipc_path)
         request_data = self.encode_batch_rpc_request(requests)
-        response = cast(List[RPCResponse], self._make_request(request_data))
+        response = cast(list[RPCResponse], self._make_request(request_data))
         return sort_batch_response_by_response_ids(response)
 
 

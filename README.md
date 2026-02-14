@@ -10,16 +10,20 @@
 
 web3.py allows you to interact with the Ethereum blockchain using Python, enabling you to build decentralized applications, interact with smart contracts, and much more.
 
-- Python 3.8+ support
+- Python 3.10+ support
 
-______________________________________________________________________
+## Installation
 
-## Quickstart
+```sh
+python -m pip install web3
+```
+
+## Documentation
 
 [Get started in 5 minutes](https://web3py.readthedocs.io/en/latest/quickstart.html) or
 [take a tour](https://web3py.readthedocs.io/en/latest/overview.html) of the library.
 
-## Documentation
+View the [change log](https://web3py.readthedocs.io/en/latest/release_notes.html).
 
 For additional guides, examples, and APIs, see the [documentation](https://web3py.readthedocs.io/en/latest/).
 

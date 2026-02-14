@@ -3,9 +3,7 @@ import logging
 from typing import (
     TYPE_CHECKING,
     Any,
-    List,
     Sequence,
-    Union,
     cast,
     overload,
 )
@@ -15,6 +13,7 @@ from eth_typing import (
 )
 
 from web3.exceptions import (
+    SubscriptionHandlerTaskException,
     SubscriptionProcessingFinished,
     TaskNotRunning,
     Web3TypeError,
@@ -50,18 +49,24 @@ class SubscriptionManager:
     logger: logging.Logger = logging.getLogger(
         "web3.providers.persistent.subscription_manager"
     )
-    total_handler_calls: int = 0
 
-    def __init__(self, w3: "AsyncWeb3") -> None:
+    def __init__(self, w3: "AsyncWeb3[Any]") -> None:
         self._w3 = w3
         self._provider = cast("PersistentConnectionProvider", w3.provider)
         self._subscription_container = SubscriptionContainer()
+
+        # parallelize all subscription handler calls
+        self.parallelize = False
+        self.task_timeout = 1
+        self._tasks: set[asyncio.Task[None]] = set()
 
         # share the subscription container with the request processor so it can separate
         # subscriptions into different queues based on ``sub._handler`` presence
         self._provider._request_processor._subscription_container = (
             self._subscription_container
         )
+
+        self.total_handler_calls: int = 0
 
     def _add_subscription(self, subscription: EthSubscription[Any]) -> None:
         self._subscription_container.add_subscription(subscription)
@@ -86,8 +91,36 @@ class SubscriptionManager:
                     f"labels.\n    label: {subscription._label}"
                 )
 
+    def _handler_task_callback(self, task: asyncio.Task[None]) -> None:
+        """
+        Callback when a handler task completes. Similar to _message_listener_callback.
+        Puts handler exceptions into the queue to be raised in the main loop, else
+        removes the task from the set of active tasks.
+        """
+        if task.done() and not task.cancelled():
+            try:
+                task.result()
+                self._tasks.discard(task)
+            except Exception as e:
+                self.logger.exception("Subscription handler task raised an exception.")
+                self._provider._request_processor._handler_subscription_queue.put_nowait(  # noqa: E501
+                    SubscriptionHandlerTaskException(task, message=str(e))
+                )
+
+    async def _cleanup_remaining_tasks(self) -> None:
+        """Cancel and clean up all remaining tasks."""
+        if not self._tasks:
+            return
+
+        self.logger.debug("Cleaning up %d remaining tasks...", len(self._tasks))
+        for task in self._tasks:
+            if not task.done():
+                task.cancel()
+
+        self._tasks.clear()
+
     @property
-    def subscriptions(self) -> List[EthSubscription[Any]]:
+    def subscriptions(self) -> list[EthSubscription[Any]]:
         return self._subscription_container.subscriptions
 
     def get_by_id(self, sub_id: HexStr) -> EthSubscription[Any]:
@@ -103,12 +136,13 @@ class SubscriptionManager:
     @overload
     async def subscribe(
         self, subscriptions: Sequence[EthSubscription[Any]]
-    ) -> List[HexStr]:
+    ) -> list[HexStr]:
         ...
 
     async def subscribe(
-        self, subscriptions: Union[EthSubscription[Any], Sequence[EthSubscription[Any]]]
-    ) -> Union[HexStr, List[HexStr]]:
+        self,
+        subscriptions: EthSubscription[Any] | Sequence[EthSubscription[Any]],
+    ) -> HexStr | list[HexStr]:
         """
         Used to subscribe to a single or multiple subscriptions.
 
@@ -123,15 +157,16 @@ class SubscriptionManager:
             subscriptions._id = sub_id
             self._add_subscription(subscriptions)
             self.logger.info(
-                "Successfully subscribed to subscription:\n    "
-                f"label: {subscriptions.label}\n    id: {sub_id}"
+                "Successfully subscribed to subscription:\n    label: %s\n    id: %s",
+                subscriptions.label,
+                sub_id,
             )
             return sub_id
         elif isinstance(subscriptions, Sequence):
             if len(subscriptions) == 0:
                 raise Web3ValueError("No subscriptions provided.")
 
-            sub_ids: List[HexStr] = []
+            sub_ids: list[HexStr] = []
             for sub in subscriptions:
                 sub_ids.append(await self.subscribe(sub))
             return sub_ids
@@ -148,17 +183,15 @@ class SubscriptionManager:
     @overload
     async def unsubscribe(
         self,
-        subscriptions: Sequence[Union[EthSubscription[Any], HexStr]],
+        subscriptions: Sequence[EthSubscription[Any] | HexStr],
     ) -> bool:
         ...
 
     async def unsubscribe(
         self,
-        subscriptions: Union[
-            EthSubscription[Any],
-            HexStr,
-            Sequence[Union[EthSubscription[Any], HexStr]],
-        ],
+        subscriptions: (
+            EthSubscription[Any] | HexStr | Sequence[EthSubscription[Any] | HexStr]
+        ),
     ) -> bool:
         """
         Used to unsubscribe from one or multiple subscriptions.
@@ -190,8 +223,10 @@ class SubscriptionManager:
             if await self._w3.eth._unsubscribe(subscriptions.id):
                 self._remove_subscription(subscriptions)
                 self.logger.info(
-                    "Successfully unsubscribed from subscription:\n    "
-                    f"label: {subscriptions.label}\n    id: {subscriptions.id}"
+                    "Successfully unsubscribed from subscription:\n"
+                    "    label: %s\n    id: %s",
+                    subscriptions.label,
+                    subscriptions.id,
                 )
 
                 if len(self._subscription_container.handler_subscriptions) == 0:
@@ -205,10 +240,10 @@ class SubscriptionManager:
             if len(subscriptions) == 0:
                 raise Web3ValueError("No subscriptions provided.")
 
-            unsubscribed: List[bool] = []
+            unsubscribed: list[bool] = []
             # re-create the subscription list to prevent modifying the original list
             # in case ``subscription_manager.subscriptions`` was passed in directly
-            subs = [sub for sub in subscriptions]
+            subs = list(subscriptions)
             for sub in subs:
                 if isinstance(sub, str):
                     sub = HexStr(sub)
@@ -216,7 +251,8 @@ class SubscriptionManager:
             return all(unsubscribed)
 
         self.logger.warning(
-            f"Failed to unsubscribe from subscription\n    subscription={subscriptions}"
+            "Failed to unsubscribe from subscription\n    subscription=%s",
+            subscriptions,
         )
         return False
 
@@ -240,7 +276,8 @@ class SubscriptionManager:
             if len(self.subscriptions) > 0:
                 self.logger.warning(
                     "Failed to unsubscribe from all subscriptions. Some subscriptions "
-                    f"are still active.\n    subscriptions={self.subscriptions}"
+                    "are still active.\n    subscriptions=%s",
+                    self.subscriptions,
                 )
             return False
 
@@ -276,14 +313,23 @@ class SubscriptionManager:
                     sub_id
                 )
                 if sub:
-                    await sub._handler(
-                        EthSubscriptionContext(
-                            self._w3,
-                            sub,
-                            formatted_sub_response["result"],
-                            **sub._handler_context,
-                        )
+                    sub_context = EthSubscriptionContext(
+                        self._w3,
+                        sub,
+                        formatted_sub_response["result"],
+                        **sub._handler_context,
                     )
+                    if sub.parallelize is True or (
+                        sub.parallelize is None and self.parallelize
+                    ):
+                        # run the handler in a task to allow parallel processing
+                        task = asyncio.create_task(sub._handler(sub_context))
+                        self._tasks.add(task)
+                        task.add_done_callback(self._handler_task_callback)
+                    else:
+                        # await the handler in the main loop to ensure order
+                        await sub._handler(sub_context)
+
             except SubscriptionProcessingFinished:
                 if not run_forever:
                     self.logger.info(
@@ -291,13 +337,20 @@ class SubscriptionManager:
                         "Stopping subscription handling."
                     )
                     break
-            except TaskNotRunning:
-                await asyncio.sleep(0)
-                self._provider._handle_listener_task_exceptions()
+            except SubscriptionHandlerTaskException:
                 self.logger.error(
-                    "Message listener background task for the provider has stopped "
-                    "unexpectedly. Stopping subscription handling."
+                    "An exception occurred in a subscription handler task. "
+                    "Stopping subscription handling."
                 )
+                await self._cleanup_remaining_tasks()
+                raise
+            except TaskNotRunning as e:
+                self.logger.error("Stopping subscription handling: %s", e.message)
+                self._provider._handle_listener_task_exceptions()
+                break
 
         # no active handler subscriptions, clear the handler subscription queue
         self._provider._request_processor._reset_handler_subscription_queue()
+
+        if self._tasks:
+            await self._cleanup_remaining_tasks()

@@ -1,11 +1,8 @@
 from typing import (
     Any,
     Callable,
-    Dict,
     Iterable,
     Sequence,
-    Tuple,
-    Union,
 )
 
 from eth_typing import (
@@ -51,6 +48,7 @@ class RPC:
     eth_blobBaseFee = RPCEndpoint("eth_blobBaseFee")
     eth_blockNumber = RPCEndpoint("eth_blockNumber")
     eth_call = RPCEndpoint("eth_call")
+    eth_simulateV1 = RPCEndpoint("eth_simulateV1")
     eth_createAccessList = RPCEndpoint("eth_createAccessList")
     eth_chainId = RPCEndpoint("eth_chainId")
     eth_estimateGas = RPCEndpoint("eth_estimateGas")
@@ -173,7 +171,7 @@ TRACE_FILTER_PARAM_ABIS = {
     "count": "int",
 }
 
-RPC_ABIS: Dict[str, Union[Sequence[Any], Dict[str, str]]] = {
+RPC_ABIS: dict[str, Sequence[Any] | dict[str, str]] = {
     # eth
     "eth_call": TRANSACTION_PARAMS_ABIS,
     "eth_createAccessList": TRANSACTION_PARAMS_ABIS,
@@ -207,25 +205,26 @@ RPC_ABIS: Dict[str, Union[Sequence[Any], Dict[str, str]]] = {
 
 @curry
 def apply_abi_formatters_to_dict(
-    normalizers: Sequence[Callable[[TypeStr, Any], Tuple[TypeStr, Any]]],
-    abi_dict: Dict[str, Any],
-    data: Dict[Any, Any],
-) -> Dict[Any, Any]:
+    normalizers: Sequence[Callable[[TypeStr, Any], tuple[TypeStr, Any]]],
+    abi_dict: dict[str, Any],
+    data: dict[Any, Any],
+) -> dict[Any, Any]:
     fields = list(abi_dict.keys() & data.keys())
     formatted_values = map_abi_data(
         normalizers,
-        [abi_dict[field] for field in fields],
-        [data[field] for field in fields],
+        (abi_dict[field] for field in fields),
+        (data[field] for field in fields),
     )
-    formatted_dict = dict(zip(fields, formatted_values))
-    return dict(data, **formatted_dict)
+    formatted_dict = data.copy()
+    formatted_dict.update(zip(fields, formatted_values))
+    return formatted_dict
 
 
 @to_dict
 def abi_request_formatters(
-    normalizers: Sequence[Callable[[TypeStr, Any], Tuple[TypeStr, Any]]],
-    abis: Dict[RPCEndpoint, Any],
-) -> Iterable[Tuple[RPCEndpoint, Callable[..., Any]]]:
+    normalizers: Sequence[Callable[[TypeStr, Any], tuple[TypeStr, Any]]],
+    abis: dict[RPCEndpoint, Any],
+) -> Iterable[tuple[RPCEndpoint, Callable[..., Any]]]:
     for method, abi_types in abis.items():
         if isinstance(abi_types, list):
             yield method, map_abi_data(normalizers, abi_types)

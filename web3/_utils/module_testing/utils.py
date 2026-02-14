@@ -1,11 +1,7 @@
-from asyncio import (
-    iscoroutinefunction,
-)
-import copy
+import inspect
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
     Union,
     cast,
 )
@@ -97,10 +93,10 @@ class RequestMocker:
 
     def __init__(
         self,
-        w3: Union["AsyncWeb3", "Web3"],
-        mock_results: Dict[Union["RPCEndpoint", str], Any] = None,
-        mock_errors: Dict[Union["RPCEndpoint", str], Any] = None,
-        mock_responses: Dict[Union["RPCEndpoint", str], Any] = None,
+        w3: Union["AsyncWeb3[Any]", "Web3"],
+        mock_results: dict[Union["RPCEndpoint", str], Any] = None,
+        mock_errors: dict[Union["RPCEndpoint", str], Any] = None,
+        mock_responses: dict[Union["RPCEndpoint", str], Any] = None,
     ):
         self.w3 = w3
         self.mock_results = mock_results or {}
@@ -114,12 +110,11 @@ class RequestMocker:
                 "AsyncMakeRequestFn", "MakeRequestFn"
             ] = w3.provider.make_request
 
+        self._mock_request_counter = 1
+
     def _build_request_id(self) -> int:
-        request_id = (
-            next(copy.deepcopy(self.w3.provider.request_counter))
-            if hasattr(self.w3.provider, "request_counter")
-            else 1
-        )
+        request_id = self._mock_request_counter
+        self._mock_request_counter += 1
         return request_id
 
     def __enter__(self) -> "Self":
@@ -131,8 +126,9 @@ class RequestMocker:
         return self
 
     def __exit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
-        # mypy error: Cannot assign to a method
-        self.w3.provider.make_request = self._make_request  # type: ignore[assignment]
+        self.w3.provider.make_request = (  # type: ignore[method-assign]
+            self._make_request
+        )
         # reset request func cache to re-build request_func with original make_request
         self.w3.provider._request_func_cache = (None, None)
 
@@ -144,7 +140,11 @@ class RequestMocker:
 
         if all(
             method not in mock_dict
-            for mock_dict in (self.mock_errors, self.mock_results, self.mock_responses)
+            for mock_dict in (
+                self.mock_errors,
+                self.mock_results,
+                self.mock_responses,
+            )
         ):
             return self._make_request(method, params)
 
@@ -204,7 +204,7 @@ class RequestMocker:
     async def __aexit__(self, exc_type: Any, exc_value: Any, traceback: Any) -> None:
         if not isinstance(self.w3.provider, PersistentConnectionProvider):
             # mypy error: Cannot assign to a method
-            self.w3.provider.make_request = self._make_request  # type: ignore[assignment]  # noqa: E501
+            self.w3.provider.make_request = self._make_request  # type: ignore[method-assign]  # noqa: E501
             # reset request func cache to re-build request_func w/ original make_request
             self.w3.provider._request_func_cache = (None, None)
         else:
@@ -224,7 +224,7 @@ class RequestMocker:
 
             if callable(mock_return):
                 mock_return = mock_return(method, params)
-            elif iscoroutinefunction(mock_return):
+            elif inspect.iscoroutinefunction(mock_return):
                 # this is the "correct" way to mock the async make_request
                 mock_return = await mock_return(method, params)
 
@@ -239,7 +239,7 @@ class RequestMocker:
             if callable(mock_return):
                 # handle callable to make things easier since we're mocking
                 mock_return = mock_return(method, params)
-            elif iscoroutinefunction(mock_return):
+            elif inspect.iscoroutinefunction(mock_return):
                 # this is the "correct" way to mock the async make_request
                 mock_return = await mock_return(method, params)
 
@@ -249,7 +249,7 @@ class RequestMocker:
             error = self.mock_errors[method]
             if callable(error):
                 error = error(method, params)
-            elif iscoroutinefunction(error):
+            elif inspect.iscoroutinefunction(error):
                 error = await error(method, params)
             mocked_result = merge(response_dict, self._create_error_object(error))
 
@@ -261,11 +261,15 @@ class RequestMocker:
     async def _async_mock_request_handler(
         self, method: "RPCEndpoint", params: Any
     ) -> "RPCResponse":
-        self.w3 = cast("AsyncWeb3", self.w3)
+        self.w3 = cast("AsyncWeb3[Any]", self.w3)
         self._make_request = cast("AsyncMakeRequestFn", self._make_request)
         if all(
             method not in mock_dict
-            for mock_dict in (self.mock_errors, self.mock_results, self.mock_responses)
+            for mock_dict in (
+                self.mock_errors,
+                self.mock_results,
+                self.mock_responses,
+            )
         ):
             return await self._make_request(method, params)
         mocked_result = await self._async_build_mock_result(method, params)
@@ -289,7 +293,11 @@ class RequestMocker:
     ) -> "RPCRequest":
         if all(
             method not in mock_dict
-            for mock_dict in (self.mock_errors, self.mock_results, self.mock_responses)
+            for mock_dict in (
+                self.mock_errors,
+                self.mock_results,
+                self.mock_responses,
+            )
         ):
             return await self._send_request(method, params)
         else:
@@ -299,12 +307,16 @@ class RequestMocker:
     async def _async_mock_recv_handler(
         self, rpc_request: "RPCRequest"
     ) -> "RPCResponse":
-        self.w3 = cast("AsyncWeb3", self.w3)
+        self.w3 = cast("AsyncWeb3[Any]", self.w3)
         method = rpc_request["method"]
         request_id = rpc_request["id"]
         if all(
             method not in mock_dict
-            for mock_dict in (self.mock_errors, self.mock_results, self.mock_responses)
+            for mock_dict in (
+                self.mock_errors,
+                self.mock_results,
+                self.mock_responses,
+            )
         ):
             return await self._recv_for_request(request_id)
         mocked_result = await self._async_build_mock_result(
@@ -326,7 +338,7 @@ class RequestMocker:
             return mocked_result
 
     @staticmethod
-    def _create_error_object(error: Dict[str, Any]) -> Dict[str, Any]:
+    def _create_error_object(error: dict[str, Any]) -> dict[str, Any]:
         code = error.get("code", -32000)
         message = error.get("message", "Mocked error")
         return {"error": merge({"code": code, "message": message}, error)}

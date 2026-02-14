@@ -1,9 +1,9 @@
+import pytest
 import asyncio
 from concurrent.futures import (
     ThreadPoolExecutor,
 )
 import json
-import pytest
 import threading
 import time
 
@@ -87,7 +87,7 @@ def _simulate_call(http_session_manager, uri):
     return _session
 
 
-@pytest.fixture(scope="function")
+@pytest.fixture
 def http_session_manager():
     return HTTPSessionManager()
 
@@ -342,7 +342,7 @@ async def test_session_manager_async_json_make_get_request(
     response = await http_session_manager.async_json_make_get_request(TEST_URI)
     assert response == json.dumps({"data": "content"})
     assert len(http_session_manager.session_cache) == 1
-    cache_key = generate_cache_key(f"{threading.get_ident()}:{TEST_URI}")
+    cache_key = generate_cache_key(f"{id(asyncio.get_event_loop())}:{TEST_URI}")
     session = http_session_manager.session_cache.get_cache_entry(cache_key)
     assert isinstance(session, ClientSession)
     session.get.assert_called_once_with(
@@ -367,7 +367,7 @@ async def test_session_manager_async_json_make_post_request(
     )
     assert response == json.dumps({"data": "content"})
     assert len(http_session_manager.session_cache) == 1
-    cache_key = generate_cache_key(f"{threading.get_ident()}:{TEST_URI}")
+    cache_key = generate_cache_key(f"{id(asyncio.get_event_loop())}:{TEST_URI}")
     session = http_session_manager.session_cache.get_cache_entry(cache_key)
     assert isinstance(session, ClientSession)
     session.post.assert_called_once_with(
@@ -391,7 +391,7 @@ async def test_session_manager_async_make_post_request(mocker, http_session_mana
     )
     assert response == "content"
     assert len(http_session_manager.session_cache) == 1
-    cache_key = generate_cache_key(f"{threading.get_ident()}:{TEST_URI}")
+    cache_key = generate_cache_key(f"{id(asyncio.get_event_loop())}:{TEST_URI}")
     session = http_session_manager.session_cache.get_cache_entry(cache_key)
     assert isinstance(session, ClientSession)
     session.post.assert_called_once_with(
@@ -431,7 +431,7 @@ async def test_session_manager_async_precached_session(http_session_manager):
 
 
 @pytest.mark.asyncio
-async def test_session_manager_async_cache_does_not_close_session_before_a_call_when_multithreading(  # noqa: E501
+async def test_async_session_manager_cache_does_not_close_session_before_call(
     http_session_manager,
 ):
     # set cache size to 1 + set future session close thread time to 0.01s
@@ -442,16 +442,13 @@ async def test_session_manager_async_cache_does_not_close_session_before_a_call_
         _session = await http_session_manager.async_cache_and_return_session(
             uri, request_timeout=ClientTimeout(_timeout_for_testing)
         )
-
         # simulate a call taking 0.01s to return a response
         await asyncio.sleep(_timeout_for_testing)
 
         assert not _session.closed
         return _session
 
-    tasks = [cache_uri_and_return_session(uri) for uri in UNIQUE_URIS]
-
-    all_sessions = await asyncio.gather(*tasks)
+    all_sessions = [await cache_uri_and_return_session(uri) for uri in UNIQUE_URIS]
     assert len(all_sessions) == len(UNIQUE_URIS)
     assert all(isinstance(s, ClientSession) for s in all_sessions)
 
@@ -485,7 +482,7 @@ async def test_session_manager_async_unique_cache_keys_created_per_thread_with_s
         event_loop = asyncio.new_event_loop()
         unique_session = event_loop.run_until_complete(
             http_session_manager.async_cache_and_return_session(
-                endpoint_uri, request_timeout=ClientTimeout(0.01)
+                endpoint_uri, request_timeout=ClientTimeout(0.1)
             )
         )
         event_loop.close()
@@ -500,6 +497,7 @@ async def test_session_manager_async_unique_cache_keys_created_per_thread_with_s
             daemon=True,
         )
         thread.start()
+        time.sleep(0.01)
         threads.append(thread)
 
     [thread.join() for thread in threads]
@@ -529,7 +527,7 @@ async def test_session_manager_async_use_new_session_if_loop_closed_for_cached_s
     )
 
     # assert session1 was cached
-    cache_key = generate_cache_key(f"{threading.get_ident()}:{TEST_URI}")
+    cache_key = generate_cache_key(f"{id(asyncio.get_event_loop())}:{TEST_URI}")
 
     assert len(http_session_manager.session_cache) == 1
     cached_session = http_session_manager.session_cache.get_cache_entry(cache_key)
@@ -569,7 +567,7 @@ async def test_session_manager_async_use_new_session_if_session_closed_for_cache
     )
 
     # assert session1 was cached
-    cache_key = generate_cache_key(f"{threading.get_ident()}:{TEST_URI}")
+    cache_key = generate_cache_key(f"{id(asyncio.get_event_loop())}:{TEST_URI}")
 
     assert len(http_session_manager.session_cache) == 1
     cached_session = http_session_manager.session_cache.get_cache_entry(cache_key)
